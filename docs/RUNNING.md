@@ -34,6 +34,12 @@ Stop it:
 docker compose down
 ```
 
+To fully stop DaVinci-side runtime processes on the host, including orphaned `fuscript.exe` instances:
+
+```powershell
+.\scripts\dev_kill_davinci.ps1
+```
+
 ## 2. Start DaVinci Resolve Free
 
 On Windows host, start Resolve normally or from PowerShell:
@@ -94,7 +100,7 @@ When it starts successfully, status is now shown through the DaVinci Console wit
 
 If the script is already running and you launch it again, Resolve Console should print:
 
-- `[DFMCP] already running`
+- `[DFMCP][newid] duplicate executor blocked | owner=<existing-id> | owner_started_at=<timestamp>`
 
 The script also writes to:
 

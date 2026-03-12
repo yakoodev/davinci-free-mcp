@@ -30,6 +30,8 @@ The format is intentionally simple:
 - added read-only project and timeline tools to the backend and MCP surface
 - added `instance_id` to executor logging and status output
 - added lock ownership diagnostics for duplicate executor investigation
+- added `dev_kill_davinci.ps1` for full shutdown of `Resolve.exe` and `fuscript.exe`
+- made duplicate executor warnings explicit in DaVinci Console
 - normalized unknown-command handling toward `unsupported_command`
 - documented Codex Desktop connection flow and REST-mode verification
 - added Russian-language overview documentation

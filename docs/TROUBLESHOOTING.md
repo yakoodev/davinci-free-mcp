@@ -24,9 +24,10 @@ Symptoms:
 Checks:
 
 - fully close Resolve and relaunch it
+- if needed, use `.\scripts\dev_kill_davinci.ps1` to stop `Resolve.exe` and all `fuscript.exe`
 - make sure the bootstrap is started only once
 - if needed, run `.\scripts\dev_reset_runtime.ps1 -IncludeLock` only after Resolve is fully closed
-- if a second start happens while one is healthy, Resolve Console should print `[DFMCP] already running`
+- if a second start happens while one is healthy, Resolve Console should print `duplicate executor blocked`
 - compare `instance_id` in:
   - `.\scripts\dev_status.ps1`
   - `.\scripts\dev_who_owns_lock.ps1`

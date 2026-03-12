@@ -154,6 +154,8 @@ The repository includes PowerShell helper scripts to keep the Windows host and D
   Start the Dockerized backend and show container status.
 - `scripts/dev_down.ps1`
   Stop the Dockerized backend.
+- `scripts/dev_kill_davinci.ps1`
+  Force-stop `Resolve.exe` and all `fuscript.exe` processes on the host.
 - `scripts/dev_container_logs.ps1`
   Show backend container logs.
 - `scripts/dev_install_executor.ps1`

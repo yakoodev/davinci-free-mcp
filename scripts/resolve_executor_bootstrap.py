@@ -346,23 +346,33 @@ def acquire_lock():
             existing = read_json(LOCK_PATH)
             if not lock_is_stale(existing):
                 owner = "-"
+                owner_started_at = "-"
                 if isinstance(existing, dict):
                     owner = existing.get("instance_id") or "-"
-                console_line("already running | owner=%s" % owner)
+                    owner_started_at = existing.get("instance_started_at") or "-"
+                console_line(
+                    "duplicate executor blocked | owner=%s | owner_started_at=%s"
+                    % (owner, owner_started_at)
+                )
                 return False
             try:
                 LOCK_PATH.unlink()
             except Exception:
                 owner = "-"
+                owner_started_at = "-"
                 if isinstance(existing, dict):
                     owner = existing.get("instance_id") or "-"
-                console_line("already running | owner=%s" % owner)
+                    owner_started_at = existing.get("instance_started_at") or "-"
+                console_line(
+                    "duplicate executor blocked | owner=%s | owner_started_at=%s"
+                    % (owner, owner_started_at)
+                )
                 return False
         else:
             with os.fdopen(fd, "w") as handle:
                 json.dump(lock_payload, handle, indent=2)
             return True
-    console_line("already running | owner=unknown")
+    console_line("duplicate executor blocked | owner=unknown | owner_started_at=-")
     return False
 
 
