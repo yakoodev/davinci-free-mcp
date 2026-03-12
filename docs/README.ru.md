@@ -98,6 +98,7 @@ Workspace -> Scripts -> Utility -> resolve_executor_bootstrap
 ```text
 DFMCP_BRIDGE_ADAPTER=local_http
 DFMCP_LOCAL_HTTP_HOST=host.docker.internal
+DFMCP_LOCAL_HTTP_BIND_HOST=127.0.0.1
 DFMCP_LOCAL_HTTP_PORT=5001
 ```
 

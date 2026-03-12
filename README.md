@@ -141,6 +141,7 @@ To experiment with the internal REST prototype, copy `.env.example` to `.env` an
 ```text
 DFMCP_BRIDGE_ADAPTER=local_http
 DFMCP_LOCAL_HTTP_HOST=host.docker.internal
+DFMCP_LOCAL_HTTP_BIND_HOST=127.0.0.1
 ```
 
 ## Repository Notes

@@ -71,6 +71,7 @@ def read_env_config():
 ENV_CONFIG = read_env_config()
 BRIDGE_MODE = ENV_CONFIG.get("DFMCP_BRIDGE_ADAPTER", "file_queue")
 LOCAL_HTTP_HOST = ENV_CONFIG.get("DFMCP_LOCAL_HTTP_HOST", "127.0.0.1")
+LOCAL_HTTP_BIND_HOST = ENV_CONFIG.get("DFMCP_LOCAL_HTTP_BIND_HOST", "127.0.0.1")
 LOCAL_HTTP_PORT = int(ENV_CONFIG.get("DFMCP_LOCAL_HTTP_PORT", "5001"))
 
 
@@ -640,9 +641,14 @@ def run_file_queue():
 
 def run_local_http():
     last_heartbeat_at = 0.0
-    server = HTTPServer((LOCAL_HTTP_HOST, LOCAL_HTTP_PORT), RequestHandler)
+    # The backend may connect through a Docker-specific hostname while the
+    # executor still needs to bind on a local host interface.
+    server = HTTPServer((LOCAL_HTTP_BIND_HOST, LOCAL_HTTP_PORT), RequestHandler)
     server.timeout = max(POLL_INTERVAL_MS / 1000.0, 0.1)
-    console_line("http listening | host=%s | port=%s" % (LOCAL_HTTP_HOST, LOCAL_HTTP_PORT))
+    console_line(
+        "http listening | bind_host=%s | connect_host=%s | port=%s"
+        % (LOCAL_HTTP_BIND_HOST, LOCAL_HTTP_HOST, LOCAL_HTTP_PORT)
+    )
     while True:
         update_status(last_poll=True)
         server.handle_request()
