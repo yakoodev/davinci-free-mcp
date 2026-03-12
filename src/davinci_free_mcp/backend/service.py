@@ -13,8 +13,14 @@ from davinci_free_mcp.contracts import (
     BridgeError,
     BridgeResult,
     ResolveHealthData,
+    ResolveMediaImportData,
+    ResolveMediaPoolListData,
     ResolveProjectCurrentData,
     ResolveProjectListData,
+    ResolveTimelineAppendClipsData,
+    ResolveTimelineCreateEmptyData,
+    ResolveTimelineCurrentData,
+    ResolveTimelineItemsListData,
     ResolveTimelineListData,
     ToolResultEnvelope,
 )
@@ -57,11 +63,77 @@ class ResolveBackendService:
             timeout_ms=timeout_ms,
         )
 
+    def timeline_current(self, timeout_ms: int | None = None) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_current",
+            ResolveTimelineCurrentData,
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_create_empty(
+        self,
+        name: str,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_create_empty",
+            ResolveTimelineCreateEmptyData,
+            payload={"name": name},
+            timeout_ms=timeout_ms,
+        )
+
+    def media_pool_list(self, timeout_ms: int | None = None) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "media_pool_list",
+            ResolveMediaPoolListData,
+            timeout_ms=timeout_ms,
+        )
+
+    def media_import(
+        self,
+        paths: list[str],
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "media_import",
+            ResolveMediaImportData,
+            payload={"paths": paths},
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_append_clips(
+        self,
+        clip_names: list[str],
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_append_clips",
+            ResolveTimelineAppendClipsData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={"clip_names": clip_names},
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_items_list(
+        self,
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_items_list",
+            ResolveTimelineItemsListData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            timeout_ms=timeout_ms,
+        )
+
     def _invoke_command(
         self,
         command_name: str,
         payload_model: type[PayloadModelT],
         *,
+        target: dict[str, object] | None = None,
+        payload: dict[str, object] | None = None,
         timeout_ms: int | None = None,
     ) -> ToolResultEnvelope:
         bridge_status = self.bridge.health_check()
@@ -79,6 +151,8 @@ class ResolveBackendService:
         effective_timeout = timeout_ms or self.settings.default_timeout_ms
         command = BridgeCommand(
             command=command_name,
+            target=target or {},
+            payload=payload or {},
             timeout_ms=effective_timeout,
             context={"tool_name": command_name, "caller": "backend"},
         )

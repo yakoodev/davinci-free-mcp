@@ -22,7 +22,9 @@ The repository currently contains a working MVP vertical slice:
 - `file_queue` bridge over a shared runtime directory
 - prototype `local_http` bridge for an executor-hosted REST server inside Resolve
 - standalone internal executor for Resolve Free
-- read-only tools: `resolve_health`, `project_current`, `project_list`, `timeline_list`
+- project and timeline tools: `resolve_health`, `project_current`, `project_list`, `timeline_list`, `timeline_current`, `timeline_create_empty`
+- media tools: `media_pool_list`, `media_import`
+- edit structure tools: `timeline_append_clips`, `timeline_items_list`
 - console-first executor status inside DaVinci Resolve
 - machine-readable executor heartbeat in `runtime/status/executor_status.json`
 - instance-aware diagnostics with `instance_id` and lock ownership visibility
@@ -152,4 +154,4 @@ DFMCP_LOCAL_HTTP_BIND_HOST=127.0.0.1
 
 ## Current Focus
 
-The current focus is to harden the bridge/executor workflow and extend the low-level read-only surface before introducing any mutation tools.
+The current focus is to harden the bridge/executor workflow and stabilize the first low-level mutation tools for timeline and media-pool automation.

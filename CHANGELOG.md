@@ -8,6 +8,19 @@ The format is intentionally simple:
 - version or milestone label
 - short list of meaningful changes
 
+## 2026-03-12 - Core media and timeline tool expansion
+
+- added low-level timeline tools:
+  - `timeline_current`
+  - `timeline_create_empty`
+  - `timeline_append_clips`
+  - `timeline_items_list`
+- added low-level media tools:
+  - `media_pool_list`
+  - `media_import`
+- extended backend and executor contracts for media pool listings, imports, timeline append results, and grouped track item inspection
+- added integration coverage for timeline creation, media import, append flows, ambiguous clip detection, and grouped timeline track inspection
+
 ## 2026-03-12 - MVP foundation
 
 - created the initial MCP-first project scaffold for DaVinci Resolve Free

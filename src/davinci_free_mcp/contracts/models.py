@@ -120,6 +120,65 @@ class ResolveTimelineSummary(BaseModel):
     name: str
 
 
+class ResolveTimelineCurrentData(BaseModel):
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+
+
+class ResolveTimelineCreateEmptyData(BaseModel):
+    created: bool
+    timeline: ResolveTimelineSummary
+
+
+class ResolveMediaPoolFolderSummary(BaseModel):
+    name: str
+
+
+class ResolveMediaPoolSubfolderSummary(BaseModel):
+    name: str
+
+
+class ResolveMediaClipSummary(BaseModel):
+    name: str
+
+
+class ResolveMediaPoolListData(BaseModel):
+    folder: ResolveMediaPoolFolderSummary
+    subfolders: list[ResolveMediaPoolSubfolderSummary] = Field(default_factory=list)
+    clips: list[ResolveMediaClipSummary] = Field(default_factory=list)
+
+
+class ResolveMediaImportData(BaseModel):
+    imported_count: int
+    items: list[ResolveMediaClipSummary] = Field(default_factory=list)
+
+
+class ResolveTimelineAppendClipsData(BaseModel):
+    timeline: ResolveTimelineSummary
+    appended: bool
+    count: int
+    clip_names: list[str] = Field(default_factory=list)
+
+
+class ResolveTimelineItemSummary(BaseModel):
+    name: str
+    start_frame: int | None = None
+    end_frame: int | None = None
+    item_index: int | None = None
+
+
+class ResolveTimelineTrackSummary(BaseModel):
+    track_type: str
+    track_index: int
+    items: list[ResolveTimelineItemSummary] = Field(default_factory=list)
+
+
+class ResolveTimelineItemsListData(BaseModel):
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    tracks: list[ResolveTimelineTrackSummary] = Field(default_factory=list)
+
+
 class ResolveHealthData(BaseModel):
     """Structured response for the first health tool."""
 

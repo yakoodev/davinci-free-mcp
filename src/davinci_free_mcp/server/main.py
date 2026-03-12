@@ -86,6 +86,58 @@ def create_server(
 
         return backend_service.timeline_list(timeout_ms).model_dump(mode="json")
 
+    @server.tool()
+    def timeline_current(timeout_ms: int = 5000) -> dict[str, object]:
+        """Return the current timeline for the open project."""
+
+        return backend_service.timeline_current(timeout_ms).model_dump(mode="json")
+
+    @server.tool()
+    def timeline_create_empty(name: str, timeout_ms: int = 5000) -> dict[str, object]:
+        """Create an empty timeline in the current project."""
+
+        return backend_service.timeline_create_empty(name, timeout_ms).model_dump(
+            mode="json"
+        )
+
+    @server.tool()
+    def media_pool_list(timeout_ms: int = 5000) -> dict[str, object]:
+        """List the current media pool folder contents."""
+
+        return backend_service.media_pool_list(timeout_ms).model_dump(mode="json")
+
+    @server.tool()
+    def media_import(paths: list[str], timeout_ms: int = 5000) -> dict[str, object]:
+        """Import files or folders into the current media pool folder."""
+
+        return backend_service.media_import(paths, timeout_ms).model_dump(mode="json")
+
+    @server.tool()
+    def timeline_append_clips(
+        clip_names: list[str],
+        timeline_name: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Append clips from the current media pool folder into a timeline."""
+
+        return backend_service.timeline_append_clips(
+            clip_names,
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def timeline_items_list(
+        timeline_name: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Return grouped timeline items for the target or current timeline."""
+
+        return backend_service.timeline_items_list(
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
     return server
 
 
