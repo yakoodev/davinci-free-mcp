@@ -17,7 +17,11 @@ class AppSettings(BaseSettings):
 
     runtime_dir: Path = Path("runtime")
     default_timeout_ms: int = 5000
+    bridge_adapter: str = "file_queue"
     bridge_poll_interval_ms: int = 100
+    local_http_host: str = "127.0.0.1"
+    local_http_port: int = 5001
+    local_http_timeout_ms: int = 5000
     mcp_transport: str = "stdio"
     mcp_host: str = "127.0.0.1"
     mcp_port: int = 8000
@@ -44,3 +48,15 @@ class AppSettings(BaseSettings):
     @property
     def logs_dir(self) -> Path:
         return self.runtime_dir / "logs"
+
+    @property
+    def status_dir(self) -> Path:
+        return self.runtime_dir / "status"
+
+    @property
+    def status_path(self) -> Path:
+        return self.status_dir / "executor_status.json"
+
+    @property
+    def lock_path(self) -> Path:
+        return self.status_dir / "executor.lock.json"

@@ -6,7 +6,7 @@ import argparse
 from typing import Any
 
 from davinci_free_mcp.backend import ResolveBackendService
-from davinci_free_mcp.bridge import FileQueueBridge
+from davinci_free_mcp.bridge import create_bridge
 from davinci_free_mcp.config import AppSettings
 
 MCP_IMPORT_ERROR: Exception | None = None
@@ -41,14 +41,14 @@ def create_server(
 
     app_settings = settings or AppSettings()
     backend_service = backend or ResolveBackendService(
-        FileQueueBridge(app_settings),
+        create_bridge(app_settings),
         app_settings,
     )
 
     server_kwargs = {
         "instructions": (
             "MCP-first bridge for DaVinci Resolve Free. "
-            "The current vertical slice exposes only the resolve_health tool."
+            "The current toolset exposes low-level read-only project and timeline tools."
         ),
     }
     if MCP_VARIANT == "fastmcp":
@@ -67,6 +67,24 @@ def create_server(
         """Return bridge, executor, Resolve, and project health information."""
 
         return backend_service.resolve_health(timeout_ms).model_dump(mode="json")
+
+    @server.tool()
+    def project_current(timeout_ms: int = 5000) -> dict[str, object]:
+        """Return the current Resolve project context."""
+
+        return backend_service.project_current(timeout_ms).model_dump(mode="json")
+
+    @server.tool()
+    def project_list(timeout_ms: int = 5000) -> dict[str, object]:
+        """Return projects in the current project-manager folder context."""
+
+        return backend_service.project_list(timeout_ms).model_dump(mode="json")
+
+    @server.tool()
+    def timeline_list(timeout_ms: int = 5000) -> dict[str, object]:
+        """Return timelines for the current project."""
+
+        return backend_service.timeline_list(timeout_ms).model_dump(mode="json")
 
     return server
 

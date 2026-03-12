@@ -11,7 +11,9 @@ BridgeErrorCategory = Literal[
     "bridge_unavailable",
     "resolve_not_ready",
     "no_project_open",
+    "no_current_timeline",
     "object_not_found",
+    "unsupported_command",
     "unsupported_in_free_mode",
     "validation_error",
     "execution_failure",
@@ -109,6 +111,15 @@ class ResolveProjectStatus(BaseModel):
     name: str | None = None
 
 
+class ResolveProjectSummary(BaseModel):
+    name: str
+
+
+class ResolveTimelineSummary(BaseModel):
+    index: int
+    name: str
+
+
 class ResolveHealthData(BaseModel):
     """Structured response for the first health tool."""
 
@@ -116,6 +127,19 @@ class ResolveHealthData(BaseModel):
     executor: ResolveExecutorStatus
     resolve: ResolveAppStatus
     project: ResolveProjectStatus
+
+
+class ResolveProjectCurrentData(BaseModel):
+    project: ResolveProjectStatus
+
+
+class ResolveProjectListData(BaseModel):
+    projects: list[ResolveProjectSummary] = Field(default_factory=list)
+
+
+class ResolveTimelineListData(BaseModel):
+    project: ResolveProjectStatus
+    timelines: list[ResolveTimelineSummary] = Field(default_factory=list)
 
 
 class ToolResultEnvelope(BaseModel):
@@ -126,4 +150,3 @@ class ToolResultEnvelope(BaseModel):
     error: BridgeError | None = None
     warnings: list[str] = Field(default_factory=list)
     meta: dict[str, Any] = Field(default_factory=dict)
-

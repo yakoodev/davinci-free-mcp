@@ -28,6 +28,7 @@ references/
 # Environment and editor files
 .env
 .env.*
+!.env.example
 .python-version
 .vscode/
 .idea/

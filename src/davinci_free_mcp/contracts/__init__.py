@@ -6,6 +6,12 @@ from .models import (
     BridgeErrorCategory,
     BridgeResult,
     ResolveHealthData,
+    ResolveProjectCurrentData,
+    ResolveProjectListData,
+    ResolveProjectStatus,
+    ResolveProjectSummary,
+    ResolveTimelineListData,
+    ResolveTimelineSummary,
     ToolResultEnvelope,
 )
 
@@ -15,6 +21,11 @@ __all__ = [
     "BridgeErrorCategory",
     "BridgeResult",
     "ResolveHealthData",
+    "ResolveProjectCurrentData",
+    "ResolveProjectListData",
+    "ResolveProjectStatus",
+    "ResolveProjectSummary",
+    "ResolveTimelineListData",
+    "ResolveTimelineSummary",
     "ToolResultEnvelope",
 ]
-

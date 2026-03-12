@@ -10,7 +10,17 @@ from pathlib import Path
 from typing import Any
 
 from davinci_free_mcp.config import AppSettings
-from davinci_free_mcp.contracts import BridgeCommand, BridgeResult, ResolveHealthData
+from davinci_free_mcp.contracts import (
+    BridgeCommand,
+    BridgeResult,
+    ResolveHealthData,
+    ResolveProjectCurrentData,
+    ResolveProjectListData,
+    ResolveProjectStatus,
+    ResolveProjectSummary,
+    ResolveTimelineListData,
+    ResolveTimelineSummary,
+)
 
 
 def resolve_from_embedded_environment(explicit_app: Any | None = None) -> Any | None:
@@ -53,6 +63,12 @@ class ResolveExecutor:
         self.adapter_name = adapter_name
         self.resolve_provider = resolve_provider or resolve_from_embedded_environment
         self._ensure_runtime_dirs()
+        self._command_handlers = {
+            "resolve_health": self._handle_resolve_health,
+            "project_current": self._handle_project_current,
+            "project_list": self._handle_project_list,
+            "timeline_list": self._handle_timeline_list,
+        }
 
     def _ensure_runtime_dirs(self) -> None:
         for path in (self.requests_dir, self.results_dir, self.deadletter_dir):
@@ -87,11 +103,12 @@ class ResolveExecutor:
         return result
 
     def handle_command(self, command: BridgeCommand) -> BridgeResult:
-        if command.command != "resolve_health":
+        handler = self._command_handlers.get(command.command)
+        if handler is None:
             return BridgeResult.failure(
                 command.request_id,
-                "unsupported_in_free_mode",
-                f"Unsupported command '{command.command}' for MVP executor.",
+                "unsupported_command",
+                f"Unsupported command '{command.command}' for executor.",
                 meta={"bridge": self.adapter_name},
             )
 
@@ -104,34 +121,23 @@ class ResolveExecutor:
                 meta={"bridge": self.adapter_name},
             )
 
-        product_name = self._safe_call(resolve, "GetProductName")
-        version = self._safe_call(resolve, "GetVersionString")
-        project_name = None
+        return handler(command, resolve)
+
+    def _handle_resolve_health(self, command: BridgeCommand, resolve: Any) -> BridgeResult:
+        current_project = self._current_project(resolve)
+        project_name = self._safe_call(current_project, "GetName")
         warnings: list[str] = []
-
-        project_manager = self._safe_call(resolve, "GetProjectManager")
-        current_project = None
-        if project_manager is not None:
-            current_project = self._safe_call(project_manager, "GetCurrentProject")
-
-        if current_project is not None:
-            project_name = self._safe_call(current_project, "GetName")
-        else:
+        if current_project is None:
             warnings.append("no_project_open")
 
         payload = ResolveHealthData.model_validate(
             {
-                "bridge": {
-                    "available": True,
-                    "adapter": self.adapter_name,
-                },
-                "executor": {
-                    "running": True,
-                },
+                "bridge": {"available": True, "adapter": self.adapter_name},
+                "executor": {"running": True},
                 "resolve": {
                     "connected": True,
-                    "product_name": product_name,
-                    "version": version,
+                    "product_name": self._safe_call(resolve, "GetProductName"),
+                    "version": self._safe_call(resolve, "GetVersionString"),
                 },
                 "project": {
                     "open": current_project is not None,
@@ -139,11 +145,70 @@ class ResolveExecutor:
                 },
             }
         )
-
         return BridgeResult.success(
             command.request_id,
             payload.model_dump(mode="json"),
             warnings=warnings,
+            meta={"bridge": self.adapter_name},
+        )
+
+    def _handle_project_current(self, command: BridgeCommand, resolve: Any) -> BridgeResult:
+        current_project = self._current_project(resolve)
+        payload = ResolveProjectCurrentData(
+            project=ResolveProjectStatus(
+                open=current_project is not None,
+                name=self._safe_call(current_project, "GetName"),
+            )
+        )
+        warnings = ["no_project_open"] if current_project is None else []
+        return BridgeResult.success(
+            command.request_id,
+            payload.model_dump(mode="json"),
+            warnings=warnings,
+            meta={"bridge": self.adapter_name},
+        )
+
+    def _handle_project_list(self, command: BridgeCommand, resolve: Any) -> BridgeResult:
+        project_manager = self._safe_call(resolve, "GetProjectManager")
+        project_names = self._list_project_names(project_manager)
+        payload = ResolveProjectListData(
+            projects=[ResolveProjectSummary(name=name) for name in project_names]
+        )
+        return BridgeResult.success(
+            command.request_id,
+            payload.model_dump(mode="json"),
+            meta={"bridge": self.adapter_name},
+        )
+
+    def _handle_timeline_list(self, command: BridgeCommand, resolve: Any) -> BridgeResult:
+        current_project = self._current_project(resolve)
+        if current_project is None:
+            return BridgeResult.failure(
+                command.request_id,
+                "no_project_open",
+                "No current project is open in Resolve.",
+                meta={"bridge": self.adapter_name},
+            )
+
+        timeline_count = self._safe_call(current_project, "GetTimelineCount") or 0
+        timelines: list[ResolveTimelineSummary] = []
+        for index in range(1, int(timeline_count) + 1):
+            timeline = self._safe_call(current_project, "GetTimelineByIndex", index)
+            if timeline is None:
+                continue
+            name = self._safe_call(timeline, "GetName") or f"Timeline {index}"
+            timelines.append(ResolveTimelineSummary(index=index, name=name))
+
+        payload = ResolveTimelineListData(
+            project=ResolveProjectStatus(
+                open=True,
+                name=self._safe_call(current_project, "GetName"),
+            ),
+            timelines=timelines,
+        )
+        return BridgeResult.success(
+            command.request_id,
+            payload.model_dump(mode="json"),
             meta={"bridge": self.adapter_name},
         )
 
@@ -153,14 +218,36 @@ class ResolveExecutor:
             time.sleep(self.settings.bridge_poll_interval_ms / 1000.0)
 
     @staticmethod
-    def _safe_call(obj: Any, method_name: str) -> Any | None:
+    def _safe_call(obj: Any, method_name: str, *args: Any) -> Any | None:
         if obj is None:
             return None
         method = getattr(obj, method_name, None)
         if method is None:
             return None
         try:
-            return method()
+            return method(*args)
         except Exception:
             return None
 
+    def _current_project(self, resolve: Any) -> Any | None:
+        project_manager = self._safe_call(resolve, "GetProjectManager")
+        if project_manager is None:
+            return None
+        return self._safe_call(project_manager, "GetCurrentProject")
+
+    def _list_project_names(self, project_manager: Any) -> list[str]:
+        if project_manager is None:
+            return []
+
+        project_names = self._safe_call(project_manager, "GetProjectListInCurrentFolder")
+        if isinstance(project_names, list):
+            return [str(name) for name in project_names]
+
+        current_folder = self._safe_call(project_manager, "GetCurrentFolder")
+        if current_folder is None:
+            return []
+
+        names = self._safe_call(current_folder, "GetProjectList")
+        if isinstance(names, list):
+            return [str(name) for name in names]
+        return []

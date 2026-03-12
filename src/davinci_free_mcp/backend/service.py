@@ -1,6 +1,10 @@
-"""Thin backend service layer."""
+"""Backend orchestration and command normalization."""
 
 from __future__ import annotations
+
+from typing import TypeVar
+
+from pydantic import BaseModel
 
 from davinci_free_mcp.bridge.base import Bridge
 from davinci_free_mcp.config import AppSettings
@@ -9,18 +13,57 @@ from davinci_free_mcp.contracts import (
     BridgeError,
     BridgeResult,
     ResolveHealthData,
+    ResolveProjectCurrentData,
+    ResolveProjectListData,
+    ResolveTimelineListData,
     ToolResultEnvelope,
 )
 
+PayloadModelT = TypeVar("PayloadModelT", bound=BaseModel)
+
 
 class ResolveBackendService:
-    """Backend orchestrator for the first vertical slice."""
+    """Backend orchestrator for low-level Resolve Free commands."""
 
     def __init__(self, bridge: Bridge, settings: AppSettings | None = None) -> None:
         self.bridge = bridge
         self.settings = settings or AppSettings()
 
     def resolve_health(self, timeout_ms: int | None = None) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "resolve_health",
+            ResolveHealthData,
+            timeout_ms=timeout_ms,
+        )
+
+    def project_current(self, timeout_ms: int | None = None) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "project_current",
+            ResolveProjectCurrentData,
+            timeout_ms=timeout_ms,
+        )
+
+    def project_list(self, timeout_ms: int | None = None) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "project_list",
+            ResolveProjectListData,
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_list(self, timeout_ms: int | None = None) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_list",
+            ResolveTimelineListData,
+            timeout_ms=timeout_ms,
+        )
+
+    def _invoke_command(
+        self,
+        command_name: str,
+        payload_model: type[PayloadModelT],
+        *,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
         bridge_status = self.bridge.health_check()
         if not bridge_status.get("available", False):
             return ToolResultEnvelope(
@@ -35,18 +78,19 @@ class ResolveBackendService:
 
         effective_timeout = timeout_ms or self.settings.default_timeout_ms
         command = BridgeCommand(
-            command="resolve_health",
+            command=command_name,
             timeout_ms=effective_timeout,
-            context={"tool_name": "resolve_health", "caller": "backend"},
+            context={"tool_name": command_name, "caller": "backend"},
         )
         self.bridge.submit_command(command)
         result = self.bridge.await_result(command.request_id, effective_timeout)
-        return self._normalize_result(result, bridge_status)
+        return self._normalize_result(result, bridge_status, payload_model)
 
     def _normalize_result(
         self,
         result: BridgeResult,
         bridge_status: dict[str, object],
+        payload_model: type[PayloadModelT],
     ) -> ToolResultEnvelope:
         if not result.ok:
             return ToolResultEnvelope(
@@ -57,14 +101,17 @@ class ResolveBackendService:
             )
 
         try:
-            health = ResolveHealthData.model_validate(result.data or {})
+            payload = payload_model.model_validate(result.data or {})
         except Exception as exc:
             return ToolResultEnvelope(
                 success=False,
                 error=BridgeError(
                     category="execution_failure",
-                    message="Executor returned an invalid health payload.",
-                    details={"exception": str(exc)},
+                    message="Executor returned an invalid payload.",
+                    details={
+                        "exception": str(exc),
+                        "expected_model": payload_model.__name__,
+                    },
                 ),
                 warnings=result.warnings,
                 meta={"bridge_status": bridge_status, **result.meta},
@@ -72,8 +119,7 @@ class ResolveBackendService:
 
         return ToolResultEnvelope(
             success=True,
-            data=health.model_dump(mode="json"),
+            data=payload.model_dump(mode="json"),
             warnings=result.warnings,
             meta={"bridge_status": bridge_status, **result.meta},
         )
-

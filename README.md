@@ -20,10 +20,12 @@ The repository currently contains a working MVP vertical slice:
 
 - Dockerized external MCP/backend service
 - `file_queue` bridge over a shared runtime directory
+- prototype `local_http` bridge for an executor-hosted REST server inside Resolve
 - standalone internal executor for Resolve Free
-- diagnostic `resolve_health` flow
+- read-only tools: `resolve_health`, `project_current`, `project_list`, `timeline_list`
 - console-first executor status inside DaVinci Resolve
 - machine-readable executor heartbeat in `runtime/status/executor_status.json`
+- instance-aware diagnostics with `instance_id` and lock ownership visibility
 
 ## Architectural Direction
 
@@ -97,21 +99,27 @@ The highest-risk part of the system is not the MCP server. It is the handshake b
   MVP tool catalog and deferrals.
 - `docs/DEVELOPMENT.md`
   Dev workflow, repo conventions, and anti-pattern guidance.
+- `docs/README.ru.md`
+  Short Russian overview and quick-start notes.
+- `docs/TROUBLESHOOTING.md`
+  Common runtime and development issues.
 - `docs/RISKS_AND_ASSUMPTIONS.md`
   Confirmed facts, hypotheses, risks, and prototype priorities.
+- `CHANGELOG.md`
+  Project patch notes and milestone history.
 
 ## Quick Start
 
 1. Start the external service:
 
 ```powershell
-docker compose up --build -d
+.\scripts\dev_up.ps1
 ```
 
-2. Copy `scripts/resolve_executor_bootstrap.py` into the Resolve user scripts directory:
+2. Install the Resolve bootstrap script:
 
-```text
-C:\Users\<user>\AppData\Roaming\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\
+```powershell
+.\scripts\dev_install_executor.ps1
 ```
 
 3. Launch DaVinci Resolve Free and run:
@@ -123,10 +131,17 @@ Workspace -> Scripts -> Utility -> resolve_executor_bootstrap
 4. Check the end-to-end diagnostic:
 
 ```powershell
-docker exec davinci-free-mcp python -m davinci_free_mcp.backend.diagnostics
+.\scripts\dev_diagnostics.ps1
 ```
 
 Detailed runtime instructions live in `docs/RUNNING.md`.
+
+To experiment with the internal REST prototype, copy `.env.example` to `.env` and set:
+
+```text
+DFMCP_BRIDGE_ADAPTER=local_http
+DFMCP_LOCAL_HTTP_HOST=host.docker.internal
+```
 
 ## Repository Notes
 
@@ -134,12 +149,6 @@ Detailed runtime instructions live in `docs/RUNNING.md`.
 - `runtime/` is generated locally and is intentionally excluded from git.
 - The internal executor is intentionally standalone and Python-3.6-compatible so it can run inside Resolve Free without depending on the main project environment.
 
-## Immediate Next Steps
+## Current Focus
 
-After this documentation pack is reviewed, the recommended first coding step is:
-
-1. define the `bridge_contract`
-2. implement a minimal `file_queue` handshake
-3. prove that an internal Resolve executor can receive a command, execute a safe read-only operation, and return a structured result
-
-That prototype should be treated as the technical gate for the rest of the backend and tool implementation.
+The current focus is to harden the bridge/executor workflow and extend the low-level read-only surface before introducing any mutation tools.

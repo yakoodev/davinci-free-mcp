@@ -8,6 +8,9 @@ services:
       - "8000:8000"
     environment:
       DFMCP_RUNTIME_DIR: /app/runtime
+      DFMCP_BRIDGE_ADAPTER: ${DFMCP_BRIDGE_ADAPTER:-file_queue}
+      DFMCP_LOCAL_HTTP_HOST: ${DFMCP_LOCAL_HTTP_HOST:-127.0.0.1}
+      DFMCP_LOCAL_HTTP_PORT: ${DFMCP_LOCAL_HTTP_PORT:-5001}
       DFMCP_MCP_TRANSPORT: streamable-http
       DFMCP_MCP_HOST: 0.0.0.0
       DFMCP_MCP_PORT: 8000
@@ -17,4 +20,3 @@ services:
     volumes:
       - ./runtime:/app/runtime
     restart: unless-stopped
-

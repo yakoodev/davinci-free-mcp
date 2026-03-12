@@ -146,6 +146,60 @@ Expected target:
 - run backend or MCP commands from the external environment
 - verify request/result flow with at least one read-only command
 
+## Development Scripts
+
+The repository includes PowerShell helper scripts to keep the Windows host and Docker workflow repeatable.
+
+- `scripts/dev_up.ps1`
+  Start the Dockerized backend and show container status.
+- `scripts/dev_down.ps1`
+  Stop the Dockerized backend.
+- `scripts/dev_container_logs.ps1`
+  Show backend container logs.
+- `scripts/dev_install_executor.ps1`
+  Copy the standalone bootstrap into the Resolve user scripts directory and remove the known duplicate system-level copy.
+- `scripts/dev_uninstall_executor.ps1`
+  Remove the bootstrap from Resolve script directories.
+- `scripts/dev_reset_runtime.ps1`
+  Clear generated runtime state without touching source files. By default it preserves the executor lock file.
+- `scripts/dev_diagnostics.ps1`
+  Run backend diagnostics against the live bridge.
+- `scripts/dev_status.ps1`
+  Print `runtime/status/executor_status.json` and highlight `instance_id`.
+- `scripts/dev_logs.ps1`
+  Show filtered executor log lines with `instance_id`-aware prefixes.
+- `scripts/dev_who_owns_lock.ps1`
+  Print lock ownership from `runtime/status/executor.lock.json`.
+- `scripts/dev_smoke.ps1`
+  Run a guarded smoke flow. It refuses to reset runtime if an executor appears to already be active.
+
+Recommended cycle:
+
+1. `.\scripts\dev_up.ps1`
+2. `.\scripts\dev_install_executor.ps1`
+3. launch Resolve Free
+4. run `resolve_executor_bootstrap` from the Resolve menu
+5. `.\scripts\dev_smoke.ps1`
+
+Important:
+
+- any time `scripts/resolve_executor_bootstrap.py` changes, rerun `.\scripts\dev_install_executor.ps1`
+- then relaunch the bootstrap from Resolve so the live executor picks up the new command whitelist
+- never run `.\scripts\dev_reset_runtime.ps1 -IncludeLock` while Resolve is still open
+- keep `CHANGELOG.md` updated for every meaningful change set, milestone, or behavior change
+
+## Patch Notes
+
+`CHANGELOG.md` is mandatory project hygiene.
+
+Update it when you:
+
+- add or remove tools
+- change bridge behavior
+- change executor startup or diagnostics
+- change helper scripts or development workflow
+- change public documentation in a way that affects usage
+
 ## Testing Strategy
 
 Split testing into three layers:
@@ -168,7 +222,8 @@ Split testing into three layers:
 - executor bootstrap
 - `resolve_health`
 - current project lookup
-- one timeline or media read operation
+- project list lookup
+- timeline list lookup
 
 ## Working With References
 
