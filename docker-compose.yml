@@ -1,0 +1,20 @@
+services:
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: davinci-free-mcp
+    ports:
+      - "8000:8000"
+    environment:
+      DFMCP_RUNTIME_DIR: /app/runtime
+      DFMCP_MCP_TRANSPORT: streamable-http
+      DFMCP_MCP_HOST: 0.0.0.0
+      DFMCP_MCP_PORT: 8000
+      DFMCP_MCP_PATH: /mcp
+      DFMCP_MCP_JSON_RESPONSE: "true"
+      DFMCP_MCP_STATELESS_HTTP: "true"
+    volumes:
+      - ./runtime:/app/runtime
+    restart: unless-stopped
+
