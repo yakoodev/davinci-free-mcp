@@ -255,6 +255,21 @@ The current tools are:
 - `project_list`
 - `project_open`
 - `timeline_list`
+- `timeline_current`
+- `timeline_create_empty`
+- `timeline_set_current`
+- `timeline_append_clips`
+- `timeline_create_from_clips`
+- `timeline_items_list`
+- `media_pool_list`
+- `media_pool_folder_open`
+- `media_pool_folder_create`
+- `media_pool_folder_up`
+- `media_clip_inspect`
+- `media_import`
+- `marker_add`
+- `marker_list`
+- `marker_delete`
 
 ## 6. Connect to Codex Desktop
 
@@ -374,6 +389,18 @@ For a smoke-style wrapper around the same flow:
 ```powershell
 .\scripts\dev_smoke_live.ps1 -ProjectName "Demo Project" -Command "pytest tests\integration -q"
 ```
+
+Recommended public MCP smoke for the new low-level toolset:
+
+1. `media_pool_list`
+2. `media_clip_inspect` for an existing clip in the current folder
+3. `media_pool_folder_create` with a unique test bin name
+4. `media_pool_folder_up`
+5. `timeline_create_from_clips` with a unique timeline name
+6. `marker_add`
+7. `marker_list`
+8. `marker_delete`
+9. `timeline_items_list`
 
 ## Agent external scripting fallback
 

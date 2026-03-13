@@ -13,6 +13,9 @@ from davinci_free_mcp.contracts import (
     BridgeError,
     BridgeResult,
     ResolveHealthData,
+    ResolveMarkerDeleteData,
+    ResolveMarkerListData,
+    ResolveMediaClipInspectData,
     ResolveMediaImportData,
     ResolveMediaPoolListData,
     ResolveMarkerAddData,
@@ -21,6 +24,7 @@ from davinci_free_mcp.contracts import (
     ResolveProjectOpenData,
     ResolveTimelineAppendClipsData,
     ResolveTimelineCreateEmptyData,
+    ResolveTimelineCreateFromClipsData,
     ResolveTimelineCurrentData,
     ResolveTimelineItemsListData,
     ResolveTimelineListData,
@@ -128,6 +132,25 @@ class ResolveBackendService:
             timeout_ms=timeout_ms,
         )
 
+    def media_pool_folder_create(
+        self,
+        name: str,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "media_pool_folder_create",
+            ResolveMediaPoolListData,
+            payload={"name": name},
+            timeout_ms=timeout_ms,
+        )
+
+    def media_pool_folder_up(self, timeout_ms: int | None = None) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "media_pool_folder_up",
+            ResolveMediaPoolListData,
+            timeout_ms=timeout_ms,
+        )
+
     def media_import(
         self,
         paths: list[str],
@@ -151,6 +174,19 @@ class ResolveBackendService:
             ResolveTimelineAppendClipsData,
             target={"timeline": timeline_name} if timeline_name else {},
             payload={"clip_names": clip_names},
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_create_from_clips(
+        self,
+        name: str,
+        clip_names: list[str],
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_create_from_clips",
+            ResolveTimelineCreateFromClipsData,
+            payload={"name": name, "clip_names": clip_names},
             timeout_ms=timeout_ms,
         )
 
@@ -187,6 +223,44 @@ class ResolveBackendService:
                 "color": color,
                 "duration": duration,
             },
+            timeout_ms=timeout_ms,
+        )
+
+    def marker_list(
+        self,
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "marker_list",
+            ResolveMarkerListData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            timeout_ms=timeout_ms,
+        )
+
+    def marker_delete(
+        self,
+        frame: int,
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "marker_delete",
+            ResolveMarkerDeleteData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={"frame": frame},
+            timeout_ms=timeout_ms,
+        )
+
+    def media_clip_inspect(
+        self,
+        clip_name: str,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "media_clip_inspect",
+            ResolveMediaClipInspectData,
+            payload={"clip_name": clip_name},
             timeout_ms=timeout_ms,
         )
 

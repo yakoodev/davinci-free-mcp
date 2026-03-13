@@ -44,3 +44,69 @@ def test_marker_add_normalizes_invalid_executor_payload() -> None:
     assert result.success is False
     assert result.error is not None
     assert result.error.category == "execution_failure"
+
+
+def test_marker_list_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "markers": [{"frame": "bad"}],
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.marker_list()
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
+def test_media_clip_inspect_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "folder": {"name": "Master"},
+                    "clip": {"name": "clip001.mov", "properties": ["bad"]},
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.media_clip_inspect("clip001.mov")
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
+def test_timeline_create_from_clips_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "created": True,
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "count": "bad",
+                    "clip_names": ["clip001.mov"],
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.timeline_create_from_clips("Assembly", ["clip001.mov"])
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"

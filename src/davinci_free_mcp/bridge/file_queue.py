@@ -63,6 +63,9 @@ class FileQueueBridge(Bridge):
                 try:
                     raw_data = json.loads(result_path.read_text(encoding="utf-8"))
                     result = BridgeResult.model_validate(raw_data)
+                except PermissionError:
+                    time.sleep(self.settings.bridge_poll_interval_ms / 1000.0)
+                    continue
                 except (json.JSONDecodeError, ValueError) as exc:
                     result = BridgeResult.failure(
                         request_id,
@@ -93,4 +96,3 @@ class FileQueueBridge(Bridge):
             "results_dir": str(self.results_dir),
             "deadletter_dir": str(self.deadletter_dir),
         }
-

@@ -8,6 +8,21 @@ The format is intentionally simple:
 - version or milestone label
 - short list of meaningful changes
 
+## 2026-03-13 - Marker, media folder, and timeline creation expansion
+
+- added low-level marker tools:
+  - `marker_list`
+  - `marker_delete`
+- added low-level media pool navigation and inspection tools:
+  - `media_pool_folder_create`
+  - `media_pool_folder_up`
+  - `media_clip_inspect`
+- added low-level timeline creation tool:
+  - `timeline_create_from_clips`
+- extended backend, executor, and MCP contracts for marker listing/deletion, folder creation/up-navigation, clip inspection, and timeline creation from resolved media pool clips
+- expanded backend and integration coverage for the new toolset
+- hardened `file_queue` result polling on Windows by retrying around transient result-file `PermissionError`
+
 ## 2026-03-12 - Core media and timeline tool expansion
 
 - added low-level timeline tools:

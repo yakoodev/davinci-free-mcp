@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import threading
 import time
 from pathlib import Path
@@ -106,6 +108,16 @@ class FakeTimeline:
     def marker_at(self, frame: int) -> dict[str, object] | None:
         return self._markers.get(frame)
 
+    def GetMarkers(self) -> dict[int, dict[str, object]]:
+        return dict(self._markers)
+
+    def DeleteMarkerAtFrame(self, frame: int) -> bool:
+        frame_value = int(frame)
+        if frame_value not in self._markers:
+            return False
+        del self._markers[frame_value]
+        return True
+
 
 class FakeMediaPoolFolder:
     def __init__(
@@ -113,10 +125,14 @@ class FakeMediaPoolFolder:
         name: str,
         subfolders: list["FakeMediaPoolFolder"] | None = None,
         clips: list[FakeMediaPoolItem] | None = None,
+        parent: "FakeMediaPoolFolder" | None = None,
     ) -> None:
         self._name = name
         self._subfolders = subfolders or []
         self._clips = clips or []
+        self._parent = parent
+        for subfolder in self._subfolders:
+            subfolder._parent = self
 
     def GetName(self) -> str:
         return self._name
@@ -130,11 +146,22 @@ class FakeMediaPoolFolder:
     def add_clip(self, clip: FakeMediaPoolItem) -> None:
         self._clips.append(clip)
 
+    def add_subfolder(self, folder: "FakeMediaPoolFolder") -> "FakeMediaPoolFolder":
+        folder._parent = self
+        self._subfolders.append(folder)
+        return folder
+
 
 class FakeMediaPool:
     def __init__(self, project: "FakeProject", current_folder: FakeMediaPoolFolder) -> None:
         self._project = project
         self._current_folder = current_folder
+        self._root_folder = current_folder
+        while getattr(self._root_folder, "_parent", None) is not None:
+            self._root_folder = self._root_folder._parent
+
+    def GetRootFolder(self) -> FakeMediaPoolFolder:
+        return self._root_folder
 
     def GetCurrentFolder(self) -> FakeMediaPoolFolder:
         return self._current_folder
@@ -147,6 +174,15 @@ class FakeMediaPool:
         timeline = FakeTimeline(name, video_tracks=[[]], audio_tracks=[])
         self._project.add_timeline(timeline, set_current=True)
         return timeline
+
+    def CreateTimelineFromClips(self, name: str, clips: list[FakeMediaPoolItem]) -> FakeTimeline:
+        timeline = FakeTimeline(name, video_tracks=[[]], audio_tracks=[])
+        timeline.append_items(clips)
+        self._project.add_timeline(timeline, set_current=True)
+        return timeline
+
+    def AddSubFolder(self, folder: FakeMediaPoolFolder, name: str) -> FakeMediaPoolFolder:
+        return folder.add_subfolder(FakeMediaPoolFolder(name))
 
     def ImportMedia(self, paths: list[str]) -> list[FakeMediaPoolItem]:
         imported: list[FakeMediaPoolItem] = []
@@ -296,8 +332,9 @@ def build_project(
     subfolder_names: list[str] | None = None,
     clip_names: list[str] | None = None,
     clip_items: list[FakeMediaPoolItem] | None = None,
+    media_pool_folder: FakeMediaPoolFolder | None = None,
 ) -> FakeProject:
-    media_folder = FakeMediaPoolFolder(
+    media_folder = media_pool_folder or FakeMediaPoolFolder(
         folder_name,
         subfolders=[FakeMediaPoolFolder(name) for name in (subfolder_names or [])],
         clips=clip_items or [FakeMediaPoolItem(name) for name in (clip_names or [])],
@@ -910,6 +947,7 @@ def test_marker_add_adds_marker_to_current_timeline(tmp_path: Path) -> None:
             "name": "Cut point",
             "note": "Review this join",
             "duration": 12,
+            "custom_data": "",
         },
     }
     assert timeline.marker_at(120) == {
@@ -978,3 +1016,331 @@ def test_marker_add_requires_current_timeline_when_not_specified(tmp_path: Path)
     assert result.success is False
     assert result.error is not None
     assert result.error.category == "no_current_timeline"
+
+
+def test_marker_list_returns_sorted_markers_for_current_timeline(tmp_path: Path) -> None:
+    timeline = FakeTimeline("Assembly")
+    timeline.AddMarker(120, "Blue", "Second", "", 1, "")
+    timeline.AddMarker(24, "Green", "First", "note", 12, "custom")
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "marker_list",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "project": {"open": True, "name": "Demo Project"},
+        "timeline": {"index": 1, "name": "Assembly"},
+        "markers": [
+            {
+                "frame": 24,
+                "color": "Green",
+                "name": "First",
+                "note": "note",
+                "duration": 12,
+                "custom_data": "custom",
+            },
+            {
+                "frame": 120,
+                "color": "Blue",
+                "name": "Second",
+                "note": "",
+                "duration": 1,
+                "custom_data": "",
+            },
+        ],
+    }
+
+
+def test_marker_list_uses_named_timeline_when_provided(tmp_path: Path) -> None:
+    active = FakeTimeline("Assembly")
+    review = FakeTimeline("Review")
+    review.AddMarker(48, "Red", "Needs fix", "", 4, "")
+    project = build_project(timelines=[active, review], current_timeline=active)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "marker_list",
+        timeline_name="Review",
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert result.data["timeline"] == {"index": 2, "name": "Review"}
+    assert result.data["markers"][0]["frame"] == 48
+
+
+def test_marker_list_requires_current_timeline_when_not_specified(tmp_path: Path) -> None:
+    project = build_project(timelines=[FakeTimeline("Assembly")], current_timeline=None)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "marker_list",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "no_current_timeline"
+
+
+def test_marker_delete_removes_marker_from_current_timeline(tmp_path: Path) -> None:
+    timeline = FakeTimeline("Assembly")
+    timeline.AddMarker(24, "Blue", "Review", "", 1, "")
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "marker_delete",
+        24,
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "deleted": True,
+        "project": {"open": True, "name": "Demo Project"},
+        "timeline": {"index": 1, "name": "Assembly"},
+        "marker": {"frame": 24},
+    }
+    assert timeline.marker_at(24) is None
+
+
+def test_marker_delete_uses_named_timeline_when_provided(tmp_path: Path) -> None:
+    active = FakeTimeline("Assembly")
+    review = FakeTimeline("Review")
+    review.AddMarker(10, "Blue", "Delete me", "", 1, "")
+    project = build_project(timelines=[active, review], current_timeline=active)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "marker_delete",
+        10,
+        timeline_name="Review",
+    )
+
+    assert result.success is True
+    assert review.marker_at(10) is None
+    assert result.data is not None
+    assert result.data["timeline"] == {"index": 2, "name": "Review"}
+
+
+def test_marker_delete_returns_not_found_for_missing_frame(tmp_path: Path) -> None:
+    timeline = FakeTimeline("Assembly")
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "marker_delete",
+        999,
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "object_not_found"
+
+
+def test_media_pool_folder_create_creates_and_switches_to_child_folder(tmp_path: Path) -> None:
+    project = build_project()
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_pool_folder_create",
+        "Selects",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "folder": {"name": "Selects"},
+        "subfolders": [],
+        "clips": [],
+    }
+    assert project.GetMediaPool().GetCurrentFolder().GetName() == "Selects"
+
+
+def test_media_pool_folder_create_requires_name(tmp_path: Path) -> None:
+    project = build_project()
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_pool_folder_create",
+        "",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
+def test_media_pool_folder_up_switches_to_parent_folder(tmp_path: Path) -> None:
+    child = FakeMediaPoolFolder("Selects", clips=[FakeMediaPoolItem("clip001.mov")])
+    root = FakeMediaPoolFolder("Master", subfolders=[child])
+    project = build_project(media_pool_folder=child)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_pool_folder_up",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "folder": {"name": "Master"},
+        "subfolders": [{"name": "Selects"}],
+        "clips": [],
+    }
+    assert project.GetMediaPool().GetCurrentFolder() is root
+
+
+def test_media_pool_folder_up_returns_validation_error_on_root(tmp_path: Path) -> None:
+    project = build_project()
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_pool_folder_up",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
+def test_media_clip_inspect_returns_properties_from_current_folder(tmp_path: Path) -> None:
+    clip = FakeMediaPoolItem(
+        "clip001.mov",
+        {"Clip Name": "clip001.mov", "File Path": "C:/media/clip001.mov", "FPS": "24"},
+    )
+    project = build_project(clip_items=[clip])
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_clip_inspect",
+        "clip001.mov",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "folder": {"name": "Master"},
+        "clip": {
+            "name": "clip001.mov",
+            "properties": {
+                "Clip Name": "clip001.mov",
+                "File Path": "C:/media/clip001.mov",
+                "FPS": "24",
+            },
+        },
+    }
+
+
+def test_media_clip_inspect_returns_not_found_for_missing_clip(tmp_path: Path) -> None:
+    project = build_project(clip_names=["clip001.mov"])
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_clip_inspect",
+        "missing.mov",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "object_not_found"
+
+
+def test_media_clip_inspect_returns_validation_error_for_ambiguous_clip(tmp_path: Path) -> None:
+    project = build_project(clip_names=["dup.mov", "dup.mov"])
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_clip_inspect",
+        "dup.mov",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
+def test_timeline_create_from_clips_creates_new_current_timeline(tmp_path: Path) -> None:
+    existing = FakeTimeline("Assembly")
+    project = build_project(
+        timelines=[existing],
+        current_timeline=existing,
+        clip_names=["clip001.mov", "clip002.mov"],
+    )
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_create_from_clips",
+        "Review Cut",
+        ["clip001.mov", "clip002.mov"],
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "created": True,
+        "timeline": {"index": 2, "name": "Review Cut"},
+        "count": 2,
+        "clip_names": ["clip001.mov", "clip002.mov"],
+    }
+    assert project.GetCurrentTimeline() is project.GetTimelineByIndex(2)
+
+
+def test_timeline_create_from_clips_requires_non_empty_list(tmp_path: Path) -> None:
+    project = build_project()
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_create_from_clips",
+        "Review Cut",
+        [],
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
+def test_timeline_create_from_clips_fails_for_missing_clip(tmp_path: Path) -> None:
+    project = build_project(clip_names=["clip001.mov"])
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_create_from_clips",
+        "Review Cut",
+        ["missing.mov"],
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "object_not_found"
+
+
+def test_timeline_create_from_clips_fails_for_ambiguous_clip(tmp_path: Path) -> None:
+    project = build_project(clip_names=["dup.mov", "dup.mov"])
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_create_from_clips",
+        "Review Cut",
+        ["dup.mov"],
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"

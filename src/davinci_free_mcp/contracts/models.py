@@ -147,6 +147,11 @@ class ResolveMediaClipSummary(BaseModel):
     name: str
 
 
+class ResolveMediaClipDetail(BaseModel):
+    name: str
+    properties: dict[str, str] = Field(default_factory=dict)
+
+
 class ResolveMediaPoolListData(BaseModel):
     folder: ResolveMediaPoolFolderSummary
     subfolders: list[ResolveMediaPoolSubfolderSummary] = Field(default_factory=list)
@@ -161,6 +166,13 @@ class ResolveMediaImportData(BaseModel):
 class ResolveTimelineAppendClipsData(BaseModel):
     timeline: ResolveTimelineSummary
     appended: bool
+    count: int
+    clip_names: list[str] = Field(default_factory=list)
+
+
+class ResolveTimelineCreateFromClipsData(BaseModel):
+    created: bool
+    timeline: ResolveTimelineSummary
     count: int
     clip_names: list[str] = Field(default_factory=list)
 
@@ -186,10 +198,11 @@ class ResolveTimelineItemsListData(BaseModel):
 
 class ResolveMarkerSummary(BaseModel):
     frame: int
-    color: str
-    name: str
+    color: str | None = None
+    name: str | None = None
     note: str | None = None
-    duration: int
+    duration: int | None = None
+    custom_data: str | None = None
 
 
 class ResolveMarkerAddData(BaseModel):
@@ -197,6 +210,28 @@ class ResolveMarkerAddData(BaseModel):
     project: ResolveProjectStatus
     timeline: ResolveTimelineSummary
     marker: ResolveMarkerSummary
+
+
+class ResolveMarkerListData(BaseModel):
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    markers: list[ResolveMarkerSummary] = Field(default_factory=list)
+
+
+class ResolveMarkerDeleteMarkerData(BaseModel):
+    frame: int
+
+
+class ResolveMarkerDeleteData(BaseModel):
+    deleted: bool
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    marker: ResolveMarkerDeleteMarkerData
+
+
+class ResolveMediaClipInspectData(BaseModel):
+    folder: ResolveMediaPoolFolderSummary
+    clip: ResolveMediaClipDetail
 
 
 class ResolveHealthData(BaseModel):

@@ -131,6 +131,20 @@ def create_server(
         )
 
     @server.tool()
+    def media_pool_folder_create(name: str, timeout_ms: int = 5000) -> dict[str, object]:
+        """Create a direct child media pool folder and switch into it."""
+
+        return backend_service.media_pool_folder_create(name, timeout_ms).model_dump(
+            mode="json"
+        )
+
+    @server.tool()
+    def media_pool_folder_up(timeout_ms: int = 5000) -> dict[str, object]:
+        """Move the current media pool folder context to its parent folder."""
+
+        return backend_service.media_pool_folder_up(timeout_ms).model_dump(mode="json")
+
+    @server.tool()
     def media_import(paths: list[str], timeout_ms: int = 5000) -> dict[str, object]:
         """Import files or folders into the current media pool folder."""
 
@@ -147,6 +161,20 @@ def create_server(
         return backend_service.timeline_append_clips(
             clip_names,
             timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def timeline_create_from_clips(
+        name: str,
+        clip_names: list[str],
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Create a new timeline from clips in the current media pool folder."""
+
+        return backend_service.timeline_create_from_clips(
+            name,
+            clip_names,
             timeout_ms=timeout_ms,
         ).model_dump(mode="json")
 
@@ -183,6 +211,40 @@ def create_server(
             duration=duration,
             timeout_ms=timeout_ms,
         ).model_dump(mode="json")
+
+    @server.tool()
+    def marker_list(
+        timeline_name: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """List markers on the current or specified timeline."""
+
+        return backend_service.marker_list(
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def marker_delete(
+        frame: int,
+        timeline_name: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Delete a marker from the current or specified timeline by frame."""
+
+        return backend_service.marker_delete(
+            frame,
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def media_clip_inspect(clip_name: str, timeout_ms: int = 5000) -> dict[str, object]:
+        """Inspect a clip in the current media pool folder."""
+
+        return backend_service.media_clip_inspect(clip_name, timeout_ms).model_dump(
+            mode="json"
+        )
 
     return server
 
