@@ -4,10 +4,14 @@
 
 ## Unreleased
 
-- Добавлен `timeline_build_from_paths` для rough-cut сборки новой timeline напрямую из списка media paths.
-- MCP теперь умеет импортировать файлы и собирать набросок ролика одной low-risk composed командой.
+- Пока нет незарелизенных записей.
 
 ## История изменений
+
+### fa0f0c3 - Add timeline build from paths tool
+
+- Добавлен `timeline_build_from_paths` для rough-cut сборки новой timeline напрямую из списка media paths.
+- MCP теперь умеет импортировать файлы и собирать набросок ролика одной low-risk composed командой.
 
 ### d05c03d - Add timeline item move tool
 
