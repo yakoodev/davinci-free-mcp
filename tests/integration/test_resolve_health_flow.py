@@ -2437,6 +2437,53 @@ def test_timeline_create_from_clips_fails_for_ambiguous_clip(tmp_path: Path) -> 
     assert result.error.category == "validation_error"
 
 
+def test_timeline_build_from_paths_imports_media_and_creates_timeline(tmp_path: Path) -> None:
+    existing = FakeTimeline("Assembly")
+    project = build_project(
+        timelines=[existing],
+        current_timeline=existing,
+    )
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_build_from_paths",
+        "Rough Cut",
+        ["C:/media/clip001.mov", "C:/media/clip002.wav"],
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "created": True,
+        "timeline": {"index": 2, "name": "Rough Cut"},
+        "imported_count": 2,
+        "count": 2,
+        "paths": ["C:/media/clip001.mov", "C:/media/clip002.wav"],
+        "clip_names": ["clip001.mov", "clip002.wav"],
+    }
+    assert project.GetCurrentTimeline() is project.GetTimelineByIndex(2)
+    assert [item.GetName() for item in project.GetMediaPool().GetCurrentFolder().GetClipList()] == [
+        "clip001.mov",
+        "clip002.wav",
+    ]
+
+
+def test_timeline_build_from_paths_requires_non_empty_paths(tmp_path: Path) -> None:
+    project = build_project()
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_build_from_paths",
+        "Rough Cut",
+        [],
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
 def test_timeline_inspect_returns_track_and_marker_counts(tmp_path: Path) -> None:
     timeline = FakeTimeline(
         "Assembly",

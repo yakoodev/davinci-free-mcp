@@ -47,6 +47,7 @@ class ResolveCommandCore(object):
             "timeline_append_clips": self._handle_timeline_append_clips,
             "timeline_clips_place": self._handle_timeline_clips_place,
             "timeline_create_from_clips": self._handle_timeline_create_from_clips,
+            "timeline_build_from_paths": self._handle_timeline_build_from_paths,
             "timeline_items_list": self._handle_timeline_items_list,
             "timeline_track_items_list": self._handle_timeline_track_items_list,
             "timeline_track_inspect": self._handle_timeline_track_inspect,
@@ -1340,6 +1341,101 @@ class ResolveCommandCore(object):
                 "timeline": self._timeline_summary(current_project, active_timeline),
                 "count": len(resolved_clips),
                 "clip_names": [str(name) for name in clip_names],
+            },
+        )
+
+    def _handle_timeline_build_from_paths(self, command, resolve):
+        current_project = self._current_project(resolve)
+        if current_project is None:
+            return self._failure(
+                command["request_id"],
+                "no_project_open",
+                "No current project is open in Resolve.",
+            )
+
+        timeline_name = str(command["payload"].get("name") or "").strip()
+        if not timeline_name:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Timeline name is required.",
+            )
+
+        paths = command["payload"].get("paths")
+        if not isinstance(paths, list) or not paths:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "At least one media path is required.",
+            )
+
+        media_pool = self._media_pool(current_project)
+        current_folder = self._current_media_pool_folder(current_project)
+        if media_pool is None or current_folder is None:
+            return self._failure(
+                command["request_id"],
+                "object_not_found",
+                "Current media pool folder is not available.",
+            )
+
+        normalized_paths = [str(path) for path in paths]
+        imported_items = self._safe_call(media_pool, "ImportMedia", normalized_paths)
+        if not isinstance(imported_items, list) or not imported_items:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve failed to import the requested media paths.",
+            )
+        if len(imported_items) != len(normalized_paths):
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve imported only part of the requested media paths.",
+                details={
+                    "requested_count": len(normalized_paths),
+                    "imported_count": len(imported_items),
+                },
+            )
+
+        created_timeline = self._safe_call(
+            media_pool,
+            "CreateTimelineFromClips",
+            timeline_name,
+            imported_items,
+        )
+        if created_timeline is None:
+            created_timeline = self._resolve_timeline_by_name(current_project, timeline_name)
+
+        if created_timeline is None:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve did not create timeline '%s' from imported media." % timeline_name,
+            )
+
+        switched = bool(self._safe_call(current_project, "SetCurrentTimeline", created_timeline))
+        active_timeline = self._safe_call(current_project, "GetCurrentTimeline")
+        active_name = self._safe_call(active_timeline, "GetName")
+        if not switched or active_timeline is None or active_name != timeline_name:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve did not switch to timeline '%s'." % timeline_name,
+                details={"timeline_name": timeline_name, "current_timeline_name": active_name},
+            )
+
+        return self._success(
+            command["request_id"],
+            data={
+                "created": True,
+                "timeline": self._timeline_summary(current_project, active_timeline),
+                "imported_count": len(imported_items),
+                "count": len(imported_items),
+                "paths": normalized_paths,
+                "clip_names": [
+                    self._clip_name(item) or normalized_paths[index]
+                    for index, item in enumerate(imported_items)
+                ],
             },
         )
 

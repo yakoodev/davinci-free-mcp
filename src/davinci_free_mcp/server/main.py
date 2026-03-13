@@ -268,6 +268,20 @@ def create_server(
         ).model_dump(mode="json")
 
     @server.tool()
+    def timeline_build_from_paths(
+        name: str,
+        paths: list[str],
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Import media paths and build a new timeline from the imported clips in one step."""
+
+        return backend_service.timeline_build_from_paths(
+            name,
+            paths,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
     def timeline_items_list(
         timeline_name: str | None = None,
         timeout_ms: int = 5000,

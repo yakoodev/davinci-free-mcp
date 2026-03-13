@@ -112,6 +112,31 @@ def test_timeline_create_from_clips_normalizes_invalid_executor_payload() -> Non
     assert result.error.category == "execution_failure"
 
 
+def test_timeline_build_from_paths_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "created": True,
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "imported_count": 2,
+                    "count": 2,
+                    "paths": ["C:/media/clip001.mov"],
+                    "clip_names": "bad",
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.timeline_build_from_paths("Assembly", ["C:/media/clip001.mov"])
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
 def test_timeline_inspect_normalizes_invalid_executor_payload() -> None:
     service = ResolveBackendService(
         FakeBridge(

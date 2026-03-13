@@ -414,6 +414,23 @@ Output contract:
 Preconditions:
 Project must be open and clip names must resolve uniquely in the current media pool folder.
 
+### `timeline_build_from_paths`
+
+Purpose:
+Import media paths into the current media pool folder and create a new timeline from the imported clips in one step.
+
+Minimum inputs:
+
+```json
+{
+  "name": "Rough Cut",
+  "paths": ["C:/media/clip001.mov", "C:/media/clip002.mov"]
+}
+```
+
+Free-mode notes:
+This is a composed workflow tool built on top of the existing low-level import and timeline creation primitives.
+
 ### `timeline_items_list`
 
 Purpose:

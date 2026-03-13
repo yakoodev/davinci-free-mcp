@@ -41,6 +41,7 @@ def test_create_server_smoke() -> None:
         "timeline_append_clips",
         "timeline_clips_place",
         "timeline_create_from_clips",
+        "timeline_build_from_paths",
         "timeline_items_list",
         "timeline_track_items_list",
         "timeline_track_inspect",

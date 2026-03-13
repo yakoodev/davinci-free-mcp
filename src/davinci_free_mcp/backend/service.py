@@ -30,6 +30,7 @@ from davinci_free_mcp.contracts import (
     ResolveProjectListData,
     ResolveProjectOpenData,
     ResolveTimelineAppendClipsData,
+    ResolveTimelineBuildFromPathsData,
     ResolveTimelineClipsPlaceData,
     ResolveTimelineItemDeleteData,
     ResolveTimelineItemInspectData,
@@ -299,6 +300,19 @@ class ResolveBackendService:
             "timeline_create_from_clips",
             ResolveTimelineCreateFromClipsData,
             payload={"name": name, "clip_names": clip_names},
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_build_from_paths(
+        self,
+        name: str,
+        paths: list[str],
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_build_from_paths",
+            ResolveTimelineBuildFromPathsData,
+            payload={"name": name, "paths": paths},
             timeout_ms=timeout_ms,
         )
 

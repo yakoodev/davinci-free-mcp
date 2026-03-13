@@ -214,6 +214,15 @@ class ResolveTimelineCreateFromClipsData(BaseModel):
     clip_names: list[str] = Field(default_factory=list)
 
 
+class ResolveTimelineBuildFromPathsData(BaseModel):
+    created: bool
+    timeline: ResolveTimelineSummary
+    imported_count: int
+    count: int
+    paths: list[str] = Field(default_factory=list)
+    clip_names: list[str] = Field(default_factory=list)
+
+
 class ResolveTimelineItemSummary(BaseModel):
     name: str
     start_frame: int | None = None

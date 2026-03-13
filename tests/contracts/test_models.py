@@ -8,6 +8,7 @@ from davinci_free_mcp.contracts import (
     ResolveMediaPoolFolderStateData,
     ResolveProjectManagerFolderStateData,
     ResolveTimelineClipsPlaceData,
+    ResolveTimelineBuildFromPathsData,
     ResolveTimelineInspectData,
     ResolveTimelineItemDeleteData,
     ResolveTimelineItemInspectData,
@@ -258,6 +259,25 @@ def test_timeline_clips_place_data_round_trip() -> None:
 
     assert restored.placed_count == 1
     assert restored.items[0].track_type == "video"
+
+
+def test_timeline_build_from_paths_data_round_trip() -> None:
+    payload = ResolveTimelineBuildFromPathsData.model_validate(
+        {
+            "created": True,
+            "timeline": {"index": 2, "name": "Rough Cut"},
+            "imported_count": 2,
+            "count": 2,
+            "paths": ["C:/media/a.mov", "C:/media/b.mov"],
+            "clip_names": ["a.mov", "b.mov"],
+        }
+    )
+
+    restored = ResolveTimelineBuildFromPathsData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.created is True
+    assert restored.imported_count == 2
+    assert restored.clip_names[1] == "b.mov"
 
 
 def test_timeline_item_delete_data_round_trip() -> None:
