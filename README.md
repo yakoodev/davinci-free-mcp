@@ -24,7 +24,7 @@ The repository currently contains a working MVP vertical slice:
 - standalone internal executor for Resolve Free
 - project and timeline tools: `resolve_health`, `project_current`, `project_list`, `project_manager_folder_list`, `project_manager_folder_open`, `project_manager_folder_up`, `project_manager_folder_path`, `project_open`, `timeline_list`, `timeline_current`, `timeline_create_empty`, `timeline_set_current`, `timeline_create_from_clips`
 - media tools: `media_pool_list`, `media_pool_folder_open`, `media_pool_folder_create`, `media_pool_folder_up`, `media_clip_inspect`, `media_import`
-- edit structure and review tools: `timeline_append_clips`, `timeline_items_list`, `marker_add`, `marker_list`, `marker_delete`
+- edit structure and review tools: `timeline_append_clips`, `timeline_items_list`, `timeline_item_inspect`, `timeline_item_delete`, `timeline_item_move`, `marker_add`, `marker_list`, `marker_delete`
 - console-first executor status inside DaVinci Resolve
 - machine-readable executor heartbeat in `runtime/status/executor_status.json`
 - instance-aware diagnostics with `instance_id` and lock ownership visibility

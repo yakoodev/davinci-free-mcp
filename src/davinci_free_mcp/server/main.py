@@ -362,6 +362,30 @@ def create_server(
         ).model_dump(mode="json")
 
     @server.tool()
+    def timeline_item_move(
+        track_type: str,
+        track_index: int,
+        item_index: int,
+        record_frame: int,
+        target_track_type: str | None = None,
+        target_track_index: int | None = None,
+        timeline_name: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Move one timeline item by recreating it at a new location and deleting the source item."""
+
+        return backend_service.timeline_item_move(
+            track_type,
+            track_index,
+            item_index,
+            record_frame,
+            target_track_type=target_track_type,
+            target_track_index=target_track_index,
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
     def marker_add(
         frame: int,
         name: str,

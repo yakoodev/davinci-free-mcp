@@ -459,6 +459,14 @@ Output contract:
 Preconditions:
 Timeline and track must exist.
 
+### `timeline_item_move`
+
+Purpose:
+Move one timeline item by recreating the same source range at a new position and deleting the source item.
+
+Free-mode notes:
+V1 does not promise preservation of transitions, Fusion/effects, or complex linked state.
+
 ## Marker Tools
 
 ### `marker_add`

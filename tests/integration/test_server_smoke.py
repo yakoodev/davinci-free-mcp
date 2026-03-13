@@ -46,6 +46,7 @@ def test_create_server_smoke() -> None:
         "timeline_track_inspect",
         "timeline_item_inspect",
         "timeline_item_delete",
+        "timeline_item_move",
         "timeline_inspect",
         "marker_add",
         "marker_list",

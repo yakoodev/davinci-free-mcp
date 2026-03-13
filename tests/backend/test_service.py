@@ -279,3 +279,41 @@ def test_timeline_item_inspect_normalizes_invalid_executor_payload() -> None:
     assert result.success is False
     assert result.error is not None
     assert result.error.category == "execution_failure"
+
+
+def test_timeline_item_move_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "moved": True,
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "source_item": {
+                        "item_index": 0,
+                        "name": "clip001.mov",
+                        "track_type": "video",
+                        "track_index": 1,
+                        "start_frame": 100,
+                        "end_frame": 124,
+                    },
+                    "item": {
+                        "item_index": 1,
+                        "name": "clip001.mov",
+                        "track_type": "video",
+                        "track_index": "bad",
+                        "start_frame": 200,
+                        "end_frame": 224,
+                    },
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.timeline_item_move("video", 1, 0, 200)
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"

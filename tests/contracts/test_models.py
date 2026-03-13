@@ -11,6 +11,7 @@ from davinci_free_mcp.contracts import (
     ResolveTimelineInspectData,
     ResolveTimelineItemDeleteData,
     ResolveTimelineItemInspectData,
+    ResolveTimelineItemMoveData,
     ResolveTimelineTrackInspectData,
     ResolveTimelineTrackItemsData,
 )
@@ -281,3 +282,35 @@ def test_timeline_item_delete_data_round_trip() -> None:
 
     assert restored.deleted is True
     assert restored.item.item_index == 0
+
+
+def test_timeline_item_move_data_round_trip() -> None:
+    payload = ResolveTimelineItemMoveData.model_validate(
+        {
+            "moved": True,
+            "project": {"open": True, "name": "Demo Project"},
+            "timeline": {"index": 1, "name": "Assembly"},
+            "source_item": {
+                "item_index": 0,
+                "name": "clip001.mov",
+                "track_type": "video",
+                "track_index": 1,
+                "start_frame": 100,
+                "end_frame": 124,
+            },
+            "item": {
+                "item_index": 1,
+                "name": "clip001.mov",
+                "track_type": "video",
+                "track_index": 2,
+                "start_frame": 200,
+                "end_frame": 224,
+            },
+        }
+    )
+
+    restored = ResolveTimelineItemMoveData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.moved is True
+    assert restored.source_item.track_index == 1
+    assert restored.item.track_index == 2

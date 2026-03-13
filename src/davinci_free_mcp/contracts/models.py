@@ -388,6 +388,14 @@ class ResolveTimelineItemDeleteData(BaseModel):
     ripple: bool = False
 
 
+class ResolveTimelineItemMoveData(BaseModel):
+    moved: bool
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    source_item: ResolveTimelinePlacedItemData
+    item: ResolveTimelinePlacedItemData
+
+
 class ToolResultEnvelope(BaseModel):
     """Backend-friendly result for tools."""
 

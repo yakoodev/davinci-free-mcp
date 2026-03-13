@@ -33,6 +33,7 @@ from davinci_free_mcp.contracts import (
     ResolveTimelineClipsPlaceData,
     ResolveTimelineItemDeleteData,
     ResolveTimelineItemInspectData,
+    ResolveTimelineItemMoveData,
     ResolveTimelineCreateEmptyData,
     ResolveTimelineCreateFromClipsData,
     ResolveTimelinePlacedItemData,
@@ -382,6 +383,35 @@ class ResolveBackendService:
                 "item_index": item_index,
                 "ripple": ripple,
             },
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_item_move(
+        self,
+        track_type: str,
+        track_index: int,
+        item_index: int,
+        record_frame: int,
+        target_track_type: str | None = None,
+        target_track_index: int | None = None,
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        payload: dict[str, object] = {
+            "track_type": track_type,
+            "track_index": track_index,
+            "item_index": item_index,
+            "record_frame": record_frame,
+        }
+        if target_track_type is not None:
+            payload["target_track_type"] = target_track_type
+        if target_track_index is not None:
+            payload["target_track_index"] = target_track_index
+        return self._invoke_command(
+            "timeline_item_move",
+            ResolveTimelineItemMoveData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload=payload,
             timeout_ms=timeout_ms,
         )
 

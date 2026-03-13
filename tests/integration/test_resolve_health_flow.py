@@ -35,11 +35,12 @@ class FakeTimelineItem:
         source_end_frame: int | None = None,
         left_offset: int = 0,
         right_offset: int = 0,
+        media_pool_item: FakeMediaPoolItem | None = None,
     ) -> None:
         self._name = name
         self._start_frame = start_frame
         self._end_frame = end_frame
-        self._media_pool_item = FakeMediaPoolItem(name)
+        self._media_pool_item = media_pool_item or FakeMediaPoolItem(name)
         self._source_start_frame = source_start_frame
         self._source_end_frame = end_frame if source_end_frame is None else source_end_frame
         self._left_offset = left_offset
@@ -89,6 +90,7 @@ class FakeTimeline:
         audio_tracks: list[list[FakeTimelineItem]] | None = None,
         *,
         allow_implicit_track_create: bool = True,
+        fail_delete: bool = False,
     ) -> None:
         self._name = name
         self._tracks = {
@@ -97,6 +99,7 @@ class FakeTimeline:
         }
         self._markers: dict[int, dict[str, object]] = {}
         self._allow_implicit_track_create = allow_implicit_track_create
+        self._fail_delete = fail_delete
 
     def GetName(self) -> str:
         return self._name
@@ -175,6 +178,8 @@ class FakeTimeline:
         return True
 
     def DeleteClips(self, timeline_items: list[FakeTimelineItem], ripple: bool = False) -> bool:
+        if self._fail_delete:
+            return False
         deleted = False
         for track_type in ("video", "audio"):
             for index, track_items in enumerate(self._tracks[track_type]):
@@ -1478,6 +1483,219 @@ def test_timeline_item_delete_removes_selected_item(tmp_path: Path) -> None:
     }
     assert len(timeline.GetItemListInTrack("video", 1)) == 1
     assert timeline.GetItemListInTrack("video", 1)[0].GetName() == "clip002.mov"
+
+
+def test_timeline_item_move_recreates_clip_on_same_track(tmp_path: Path) -> None:
+    first = FakeTimelineItem("clip001.mov", 100, 124, source_start_frame=10, source_end_frame=34)
+    second = FakeTimelineItem("clip002.mov", 200, 224)
+    first._track_type = "video"
+    first._track_index = 1
+    second._track_type = "video"
+    second._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[first, second]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_move",
+        "video",
+        1,
+        0,
+        300,
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "moved": True,
+        "project": {"open": True, "name": "Demo Project"},
+        "timeline": {"index": 1, "name": "Assembly"},
+        "source_item": {
+            "item_index": 0,
+            "name": "clip001.mov",
+            "track_type": "video",
+            "track_index": 1,
+            "start_frame": 100,
+            "end_frame": 124,
+        },
+        "item": {
+            "item_index": None,
+            "name": "clip001.mov",
+            "track_type": "video",
+            "track_index": 1,
+            "start_frame": 300,
+            "end_frame": 324,
+        },
+    }
+    moved_names = [item.GetName() for item in timeline.GetItemListInTrack("video", 1)]
+    assert moved_names == ["clip002.mov", "clip001.mov"]
+
+
+def test_timeline_item_move_auto_creates_target_track(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 124, source_start_frame=10, source_end_frame=34)
+    item._track_type = "video"
+    item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]], allow_implicit_track_create=False)
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_move",
+        "video",
+        1,
+        0,
+        400,
+        target_track_index=2,
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert result.data["item"]["track_index"] == 2
+    assert timeline.GetTrackCount("video") == 2
+    assert timeline.GetItemListInTrack("video", 1) == []
+    assert timeline.GetItemListInTrack("video", 2)[0].GetStart() == 400
+
+
+def test_timeline_item_move_falls_back_to_item_duration_for_zero_source_range(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 124, source_start_frame=0, source_end_frame=0)
+    item._track_type = "video"
+    item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_move",
+        "video",
+        1,
+        0,
+        500,
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert result.data["item"]["start_frame"] == 500
+    assert result.data["item"]["end_frame"] == 524
+
+
+def test_timeline_item_move_uses_named_timeline_when_provided(tmp_path: Path) -> None:
+    active = FakeTimeline("Assembly", video_tracks=[[]])
+    review_item = FakeTimelineItem("clip001.mov", 100, 124, source_start_frame=0, source_end_frame=24)
+    review_item._track_type = "video"
+    review_item._track_index = 1
+    review = FakeTimeline("Review", video_tracks=[[review_item]])
+    project = build_project(timelines=[active, review], current_timeline=active)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_move",
+        "video",
+        1,
+        0,
+        250,
+        timeline_name="Review",
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert result.data["timeline"] == {"index": 2, "name": "Review"}
+    assert active.GetItemListInTrack("video", 1) == []
+    assert review.GetItemListInTrack("video", 1)[0].GetStart() == 250
+
+
+def test_timeline_item_move_rejects_invalid_target_track_type(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 124)
+    item._track_type = "video"
+    item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_move",
+        "video",
+        1,
+        0,
+        300,
+        target_track_type="subtitle",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
+def test_timeline_item_move_fails_without_media_pool_item(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 124, media_pool_item=None)
+    item._media_pool_item = None
+    item._track_type = "video"
+    item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_move",
+        "video",
+        1,
+        0,
+        300,
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
+def test_timeline_item_move_fails_for_invalid_source_extents(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 124, source_start_frame=30, source_end_frame=30)
+    item._track_type = "video"
+    item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_move",
+        "video",
+        1,
+        0,
+        300,
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
+def test_timeline_item_move_reports_non_atomic_failure_when_delete_fails(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 124, source_start_frame=0, source_end_frame=24)
+    item._track_type = "video"
+    item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]], fail_delete=True)
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_move",
+        "video",
+        1,
+        0,
+        300,
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+    assert result.error.details["move_completed"] is False
+    assert len(timeline.GetItemListInTrack("video", 1)) == 2
 
 
 def test_marker_add_adds_marker_to_current_timeline(tmp_path: Path) -> None:

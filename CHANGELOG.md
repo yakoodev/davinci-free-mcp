@@ -6,6 +6,8 @@
 
 - Добавлены `project_manager_folder_list`, `project_manager_folder_open`, `project_manager_folder_up`, `project_manager_folder_path`.
 - Расширен low-level project-manager navigation с breadcrumb/path и списком дочерних folders/projects.
+- Добавлен `timeline_item_move` для low-level перемещения timeline clip через `copy+delete`.
+- Закрыт clip-oriented workflow для переноса item между позициями и треками с явной диагностикой неатомарных сбоев.
 
 ## История изменений
 

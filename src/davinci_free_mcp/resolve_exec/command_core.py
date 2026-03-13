@@ -52,6 +52,7 @@ class ResolveCommandCore(object):
             "timeline_track_inspect": self._handle_timeline_track_inspect,
             "timeline_item_inspect": self._handle_timeline_item_inspect,
             "timeline_item_delete": self._handle_timeline_item_delete,
+            "timeline_item_move": self._handle_timeline_item_move,
             "timeline_inspect": self._handle_timeline_inspect,
             "marker_add": self._handle_marker_add,
             "marker_list": self._handle_marker_list,
@@ -1606,6 +1607,169 @@ class ResolveCommandCore(object):
             },
         )
 
+    def _handle_timeline_item_move(self, command, resolve):
+        item_data, failure = self._resolve_timeline_item(command, resolve)
+        if failure is not None:
+            return failure
+
+        current_project = item_data["project"]
+        timeline = item_data["timeline"]
+        item = item_data["item"]
+
+        try:
+            record_frame = int(command["payload"].get("record_frame"))
+        except (TypeError, ValueError):
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Record frame must be an integer.",
+            )
+
+        target_track_type = command["payload"].get("target_track_type")
+        if target_track_type is None:
+            target_track_type = item_data["track_type"]
+        else:
+            target_track_type = str(target_track_type).strip().lower()
+            if target_track_type not in ("video", "audio"):
+                return self._failure(
+                    command["request_id"],
+                    "validation_error",
+                    "Target track type must be 'video' or 'audio'.",
+                )
+
+        target_track_index = command["payload"].get("target_track_index")
+        if target_track_index is None:
+            target_track_index = item_data["track_index"]
+        else:
+            try:
+                target_track_index = int(target_track_index)
+            except (TypeError, ValueError):
+                return self._failure(
+                    command["request_id"],
+                    "validation_error",
+                    "Target track index must be an integer when provided.",
+                )
+            if target_track_index < 1:
+                return self._failure(
+                    command["request_id"],
+                    "validation_error",
+                    "Target track index must be at least 1.",
+                )
+
+        media_pool_item = self._safe_call(item, "GetMediaPoolItem")
+        if media_pool_item is None:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Timeline item cannot be moved because its media pool item is unavailable.",
+            )
+
+        source_start_frame = self._timeline_item_frame(item, "GetSourceStartFrame")
+        source_end_frame = self._timeline_item_frame(item, "GetSourceEndFrame")
+        if source_start_frame is None or source_end_frame is None:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Timeline item cannot be moved because its source frame range is unavailable.",
+            )
+        if source_start_frame >= source_end_frame:
+            item_duration = self._timeline_item_frame(item, "GetDuration")
+            if (
+                source_start_frame == 0
+                and source_end_frame == 0
+                and item_duration is not None
+                and item_duration > 0
+            ):
+                source_end_frame = item_duration
+            else:
+                return self._failure(
+                    command["request_id"],
+                    "execution_failure",
+                    "Timeline item cannot be moved because its source frame range is invalid.",
+                    details={
+                        "source_start_frame": source_start_frame,
+                        "source_end_frame": source_end_frame,
+                    },
+                )
+
+        media_pool = self._media_pool(current_project)
+        if media_pool is None:
+            return self._failure(
+                command["request_id"],
+                "object_not_found",
+                "Current media pool is not available.",
+            )
+
+        required_track_indexes = {"video": 0, "audio": 0}
+        required_track_indexes[target_track_type] = int(target_track_index)
+        ensured, ensure_error = self._ensure_timeline_tracks(timeline, required_track_indexes)
+        if not ensured:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                ensure_error or "Resolve failed to prepare the target timeline tracks.",
+            )
+
+        self._safe_call(current_project, "SetCurrentTimeline", timeline)
+        clip_info = {
+            "mediaPoolItem": media_pool_item,
+            "startFrame": source_start_frame,
+            "endFrame": source_end_frame,
+            "recordFrame": record_frame,
+            "trackIndex": int(target_track_index),
+            "mediaType": 2 if target_track_type == "audio" else 1,
+        }
+        appended_items = self._safe_call(media_pool, "AppendToTimeline", [clip_info])
+        if not isinstance(appended_items, list) or len(appended_items) != 1:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve failed to place the moved timeline item.",
+            )
+
+        moved_item = appended_items[0]
+        moved_selector = self._timeline_item_selector(moved_item)
+        source_item_summary = self._timeline_item_summary(
+            item,
+            item_index=item_data["item_index"],
+            track_type=item_data["track_type"],
+            track_index=item_data["track_index"],
+        )
+        moved_item_summary = self._timeline_item_summary(
+            moved_item,
+            item_index=moved_selector.get("item_index"),
+            track_type=moved_selector.get("track_type") or target_track_type,
+            track_index=moved_selector.get("track_index") or int(target_track_index),
+            fallback_name=source_item_summary["name"],
+        )
+
+        deleted = bool(self._safe_call(timeline, "DeleteClips", [item], False))
+        if not deleted:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve placed the moved timeline item but failed to delete the source item.",
+                details={
+                    "move_completed": False,
+                    "source_item": source_item_summary,
+                    "item": moved_item_summary,
+                },
+            )
+
+        return self._success(
+            command["request_id"],
+            data={
+                "moved": True,
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(current_project, "GetName"),
+                },
+                "timeline": self._timeline_summary(current_project, timeline),
+                "source_item": source_item_summary,
+                "item": moved_item_summary,
+            },
+        )
+
     def _handle_timeline_inspect(self, command, resolve):
         current_project = self._current_project(resolve)
         if current_project is None:
@@ -2475,6 +2639,23 @@ class ResolveCommandCore(object):
             return str(name)
         media_pool_item = self._safe_call(item, "GetMediaPoolItem")
         return self._clip_name(media_pool_item)
+
+    def _timeline_item_summary(
+        self,
+        item,
+        item_index=None,
+        track_type=None,
+        track_index=None,
+        fallback_name="Timeline Item",
+    ):
+        return {
+            "item_index": item_index,
+            "name": self._timeline_item_name(item) or fallback_name,
+            "track_type": track_type,
+            "track_index": track_index,
+            "start_frame": self._timeline_item_frame(item, "GetStart"),
+            "end_frame": self._timeline_item_frame(item, "GetEnd"),
+        }
 
     def _timeline_item_frame(self, item, method_name):
         value = self._safe_call(item, method_name)
