@@ -19,3 +19,9 @@
 ## Validation Preference
 
 - Prefer validating new Resolve features against the live MCP endpoint when Resolve is available, not only through fake integration tests.
+
+## Changelog Maintenance
+
+- When changing tracked code or tests, update `CHANGELOG.md` in the same work before committing.
+- Add new entries under `Unreleased` while the change is still uncommitted.
+- When a commit is created, collapse the corresponding `Unreleased` notes into a committed section with the commit hash and a short title.

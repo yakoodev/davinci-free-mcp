@@ -21,6 +21,8 @@ dist/
 
 # Local runtime data
 runtime/
+tmp/
+.codex/
 
 # Local reference material
 references/

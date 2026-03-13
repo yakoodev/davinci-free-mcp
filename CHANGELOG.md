@@ -1,87 +1,81 @@
-# Changelog
+# CHANGELOG
 
-All notable changes to this project should be recorded in this file.
+Все существенные изменения проекта фиксируются в этом файле.
 
-The format is intentionally simple:
+## Unreleased
 
-- date
-- version or milestone label
-- short list of meaningful changes
+- Пока нет незарелизенных записей.
 
-## 2026-03-13 - Marker, media folder, and timeline creation expansion
+## История изменений
 
-- added low-level marker tools:
-  - `marker_list`
-  - `marker_delete`
-- added low-level media pool navigation and inspection tools:
-  - `media_pool_folder_create`
-  - `media_pool_folder_up`
-  - `media_clip_inspect`
-- added low-level timeline creation tool:
-  - `timeline_create_from_clips`
-- extended backend, executor, and MCP contracts for marker listing/deletion, folder creation/up-navigation, clip inspection, and timeline creation from resolved media pool clips
-- expanded backend and integration coverage for the new toolset
-- hardened `file_queue` result polling on Windows by retrying around transient result-file `PermissionError`
+### 4cad928 - Create missing tracks before clip placement
 
-## 2026-03-12 - Core media and timeline tool expansion
+- `timeline_clips_place` теперь заранее создает недостающие timeline tracks через Resolve API перед placement.
+- Исправлен live-баг, из-за которого overlay placement на новый `V2` мог возвращать успех без фактического появления клипа.
 
-- added low-level timeline tools:
-  - `timeline_current`
-  - `timeline_create_empty`
-  - `timeline_append_clips`
-  - `timeline_items_list`
-- added low-level media tools:
-  - `media_pool_list`
-  - `media_import`
-- extended backend and executor contracts for media pool listings, imports, timeline append results, and grouped track item inspection
-- added integration coverage for timeline creation, media import, append flows, ambiguous clip detection, and grouped timeline track inspection
+### 0e4da3a - Add clip placement and timeline item tools
 
-## 2026-03-12 - Agent live automation and project opening
+- Добавлены low-level tools `timeline_clips_place`, `timeline_item_inspect`, `timeline_item_delete`.
+- Добавлена placement-семантика с `record_frame`, `track_index`, `start_frame`, `end_frame` и `media_type`.
+- Добавлен inspect/delete workflow для конкретного timeline item.
+- Исправлены live edge cases для delete summary и default `media_type=1` для video placement.
 
-- added low-level `project_open` across executor, backend, and MCP server
-- added agent-only host helper `scripts/dev_agent_live_run.ps1` to wait for executor readiness, open a target project, and run a host command outside MCP
-- added `scripts/dev_smoke_live.ps1` for non-interactive live smoke runs
-- added agent-only external scripting fallback with `scripts/dev_external_scripting_diagnostics.ps1` and `scripts/dev_agent_external_run.ps1`
-- updated docs to recommend the new live automation flow for agent-driven validation
+### 5829441 - Add recursive folder, track, and marker range tools
 
-## 2026-03-12 - Embedded script launch stabilization
+- Добавлены `media_pool_folder_list_recursive`, `timeline_track_inspect`, `marker_list_range`.
+- Расширен low-level inspection для media pool, tracks и диапазонной выборки маркеров.
 
-- added `scripts/dev_start_resolve_with_python.ps1` to start Resolve with Python 3.11 present in `PATH`
-- confirmed that embedded `Workspace -> Scripts` availability on this machine depends on launching Resolve with a usable Python in `PATH`
-- documented the reliable retest cycle for live feature validation:
-  - kill stale Resolve processes
-  - reinstall bootstrap when needed
-  - recreate the backend container
-  - start Resolve with Python-aware environment
-  - open the test project
-  - launch `resolve_executor_bootstrap`
-  - run diagnostics and MCP smoke checks
+### 94cb7b8 - Add targeted marker, track, and clip inspection tools
 
-## 2026-03-12 - MVP foundation
+- Добавлены `media_clip_inspect_path`, `timeline_track_items_list`, `marker_inspect`.
+- Улучшена адресная инспекция клипов, треков и отдельных маркеров.
 
-- created the initial MCP-first project scaffold for DaVinci Resolve Free
-- added documentation for architecture, roadmap, tools, references, development, risks, running, and troubleshooting
-- added Dockerized external MCP/backend service
-- implemented `file_queue` bridge
-- implemented standalone Resolve bootstrap for internal execution in Resolve Free
-- added console-first executor observability and machine-readable executor status
-- added read-only tools:
-  - `resolve_health`
-  - `project_current`
-  - `project_list`
-  - `timeline_list`
-- added `instance_id` and lock ownership diagnostics for executor duplication analysis
-- added `local_http` bridge prototype inspired by the internal REST approach
-- added PowerShell helper scripts for install, runtime reset, diagnostics, logs, lock inspection, and smoke checks
+### f28a7cd - Add media pool path tools and timeline inspect
 
-## 2026-03-12 - Executor observability and read-only expansion
+- Добавлены `media_pool_folder_root`, `media_pool_folder_path`, `media_pool_folder_open_path`, `timeline_inspect`.
+- MCP получил явные path-oriented media pool операции и агрегированную сводку по timeline.
 
-- added read-only project and timeline tools to the backend and MCP surface
-- added `instance_id` to executor logging and status output
-- added lock ownership diagnostics for duplicate executor investigation
-- added `dev_kill_davinci.ps1` for full shutdown of `Resolve.exe` and `fuscript.exe`
-- made duplicate executor warnings explicit in DaVinci Console
-- normalized unknown-command handling toward `unsupported_command`
-- documented Codex Desktop connection flow and REST-mode verification
-- added Russian-language overview documentation
-- documented `host.docker.internal` as the correct local HTTP host for Dockerized backend testing
+### eefa7ae - Add marker, media folder, and timeline creation tools
+
+- Добавлены инструменты для создания timeline, работы с media pool folders и управления маркерами.
+- Расширен mutation surface для базовых Resolve workflow операций.
+
+### 626e3cf - Add timeline context and marker MCP tools
+
+- Добавлены timeline context tools и первая волна marker-oriented MCP операций.
+- Улучшена навигация по timeline state через публичный MCP слой.
+
+### 69a6b04 - Add external Resolve automation tooling
+
+- Добавлены внешние automation scripts и tooling для запуска/проверки Resolve вне embedded path.
+- Улучшен dev workflow для live validation и startup automation.
+
+### c2d42b6 - Refactor resolve executor command core
+
+- Переработан `resolve_exec.command_core` как общий low-level execution слой.
+- Улучшена структура handlers и расширяемость для новых MCP tools.
+
+### 656669f - Add core timeline and media MCP tools
+
+- Добавлены базовые timeline и media tools, формирующие основной MCP surface проекта.
+- Заложен low-level workflow для списка timeline/media сущностей и базовых mutation операций.
+
+### 99c33c0 - Fix local HTTP bridge bind host handling
+
+- Исправлена конфигурация bind/connect host для local HTTP bridge.
+- Стабилизировано взаимодействие backend container <-> host-side executor bridge.
+
+### 1c3fbf3 - Add full DaVinci shutdown helper and duplicate warnings
+
+- Добавлен helper для полного завершения DaVinci-side runtime процессов.
+- Добавлены предупреждения по duplicate executor/runtime state.
+
+### b7d33ee - Add executor diagnostics and local HTTP bridge prototype
+
+- Добавлены diagnostics для embedded executor и прототип local HTTP bridge.
+- Подготовлена инфраструктура для live Resolve communication вне file queue-only модели.
+
+### a309fc1 - Initial DavinciFreeMcp MVP scaffold
+
+- Создан первоначальный MVP scaffold проекта.
+- Заложена базовая структура backend, contracts, server и resolve executor.
