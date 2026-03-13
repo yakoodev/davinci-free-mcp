@@ -1007,6 +1007,7 @@ class ResolveCommandCore(object):
 
         clip_infos = []
         normalized = []
+        required_track_indexes = {"video": 0, "audio": 0}
         for placement in placements:
             if not isinstance(placement, dict):
                 return self._failure(
@@ -1098,15 +1099,24 @@ class ResolveCommandCore(object):
                 )
             clip_info["mediaType"] = media_type
             clip_infos.append(clip_info)
+            track_type = "audio" if media_type == 2 else "video"
+            required_track_indexes[track_type] = max(required_track_indexes[track_type], track_index)
             normalized.append(
                 {
                     "name": clip_name,
-                    "track_type": "audio" if media_type == 2 else "video",
+                    "track_type": track_type,
                     "track_index": track_index,
                 }
             )
 
         self._safe_call(current_project, "SetCurrentTimeline", timeline)
+        ensured, ensure_error = self._ensure_timeline_tracks(timeline, required_track_indexes)
+        if not ensured:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                ensure_error or "Resolve failed to prepare the required timeline tracks.",
+            )
         appended_items = self._safe_call(media_pool, "AppendToTimeline", clip_infos)
         if not isinstance(appended_items, list) or len(appended_items) != len(clip_infos):
             return self._failure(
@@ -2242,6 +2252,30 @@ class ResolveCommandCore(object):
             except (TypeError, ValueError):
                 pass
         return {"track_type": None, "track_index": None, "item_index": None}
+
+    def _ensure_timeline_tracks(self, timeline, required_track_indexes):
+        for track_type in ("video", "audio"):
+            required_index = int(required_track_indexes.get(track_type, 0) or 0)
+            if required_index < 1:
+                continue
+
+            current_count = int(self._safe_call(timeline, "GetTrackCount", track_type) or 0)
+            while current_count < required_index:
+                created = bool(
+                    self._safe_call(
+                        timeline,
+                        "AddTrack",
+                        track_type,
+                        {"index": current_count + 1},
+                    )
+                )
+                if not created:
+                    return False, "Resolve failed to create %s track %s." % (
+                        track_type,
+                        current_count + 1,
+                    )
+                current_count = int(self._safe_call(timeline, "GetTrackCount", track_type) or 0)
+        return True, None
 
     def _timeline_track_counts(self, timeline, track_type):
         track_count = self._safe_call(timeline, "GetTrackCount", track_type) or 0

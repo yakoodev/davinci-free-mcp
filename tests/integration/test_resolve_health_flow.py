@@ -87,6 +87,8 @@ class FakeTimeline:
         name: str,
         video_tracks: list[list[FakeTimelineItem]] | None = None,
         audio_tracks: list[list[FakeTimelineItem]] | None = None,
+        *,
+        allow_implicit_track_create: bool = True,
     ) -> None:
         self._name = name
         self._tracks = {
@@ -94,6 +96,7 @@ class FakeTimeline:
             "audio": audio_tracks or [],
         }
         self._markers: dict[int, dict[str, object]] = {}
+        self._allow_implicit_track_create = allow_implicit_track_create
 
     def GetName(self) -> str:
         return self._name
@@ -135,6 +138,8 @@ class FakeTimeline:
             end_frame = int(clip_info.get("endFrame", start_frame + 100))
             track_type = "audio" if media_type == 2 else "video"
 
+            if not self._allow_implicit_track_create and len(self._tracks[track_type]) < track_index:
+                return []
             while len(self._tracks[track_type]) < track_index:
                 self._tracks[track_type].append([])
 
@@ -151,6 +156,23 @@ class FakeTimeline:
             self._tracks[track_type][track_index - 1].sort(key=lambda value: value.GetStart())
             appended.append(item)
         return appended
+
+    def AddTrack(self, track_type: str, new_track_options: object = None) -> bool:
+        tracks = self._tracks.get(track_type)
+        if tracks is None:
+            return False
+
+        track_index = len(tracks) + 1
+        if isinstance(new_track_options, dict) and "index" in new_track_options:
+            try:
+                track_index = int(new_track_options["index"])
+            except (TypeError, ValueError):
+                return False
+        if track_index < 1 or track_index > len(tracks) + 1:
+            return False
+
+        tracks.insert(track_index - 1, [])
+        return True
 
     def DeleteClips(self, timeline_items: list[FakeTimelineItem], ripple: bool = False) -> bool:
         deleted = False
@@ -1118,7 +1140,7 @@ def test_timeline_track_inspect_returns_not_found_for_missing_track(tmp_path: Pa
 
 
 def test_timeline_clips_place_places_subclip_on_requested_track(tmp_path: Path) -> None:
-    timeline = FakeTimeline("Assembly", video_tracks=[[]])
+    timeline = FakeTimeline("Assembly", video_tracks=[[]], allow_implicit_track_create=False)
     project = build_project(
         timelines=[timeline],
         current_timeline=timeline,
@@ -1171,6 +1193,7 @@ def test_timeline_clips_place_places_subclip_on_requested_track(tmp_path: Path) 
             },
         ],
     }
+    assert timeline.GetTrackCount("video") == 2
 
 
 def test_timeline_item_inspect_returns_clip_timing_details(tmp_path: Path) -> None:
