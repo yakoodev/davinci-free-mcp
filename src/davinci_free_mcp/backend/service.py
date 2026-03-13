@@ -6,9 +6,13 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
+from davinci_free_mcp.backend.media_analysis import LocalMediaAnalyzer
 from davinci_free_mcp.bridge.base import Bridge
 from davinci_free_mcp.config import AppSettings
 from davinci_free_mcp.contracts import (
+    AudioEventsData,
+    AudioProbeData,
+    AudioTranscriptionData,
     BridgeCommand,
     BridgeError,
     BridgeResult,
@@ -46,6 +50,10 @@ from davinci_free_mcp.contracts import (
     ResolveTimelineListData,
     ResolveTimelineSetCurrentData,
     ToolResultEnvelope,
+    VideoProbeData,
+    VideoSegmentationData,
+    VideoSegmentScreenshotsData,
+    VideoShotsData,
 )
 
 PayloadModelT = TypeVar("PayloadModelT", bound=BaseModel)
@@ -57,6 +65,7 @@ class ResolveBackendService:
     def __init__(self, bridge: Bridge, settings: AppSettings | None = None) -> None:
         self.bridge = bridge
         self.settings = settings or AppSettings()
+        self.media_analyzer = LocalMediaAnalyzer(self.settings)
 
     def resolve_health(self, timeout_ms: int | None = None) -> ToolResultEnvelope:
         return self._invoke_command(
@@ -547,6 +556,170 @@ class ResolveBackendService:
             ResolveMediaClipInspectPathData,
             payload={"path": path},
             timeout_ms=timeout_ms,
+        )
+
+    def audio_probe(self, path: str, timeout_ms: int | None = None) -> ToolResultEnvelope:
+        return self._invoke_local_analysis("audio_probe", AudioProbeData, path=path)
+
+    def audio_transcribe_segments(
+        self,
+        path: str,
+        language: str | None = None,
+        max_segment_sec: float = 15,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_local_analysis(
+            "audio_transcribe_segments",
+            AudioTranscriptionData,
+            path=path,
+            language=language,
+            max_segment_sec=max_segment_sec,
+        )
+
+    def audio_detect_events(
+        self,
+        path: str,
+        min_silence_sec: float = 0.7,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_local_analysis(
+            "audio_detect_events",
+            AudioEventsData,
+            path=path,
+            min_silence_sec=min_silence_sec,
+        )
+
+    def video_probe(self, path: str, timeout_ms: int | None = None) -> ToolResultEnvelope:
+        return self._invoke_local_analysis("video_probe", VideoProbeData, path=path)
+
+    def video_detect_shots(
+        self,
+        path: str,
+        cut_threshold: float = 0.35,
+        min_shot_sec: float = 1.0,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_local_analysis(
+            "video_detect_shots",
+            VideoShotsData,
+            path=path,
+            cut_threshold=cut_threshold,
+            min_shot_sec=min_shot_sec,
+        )
+
+    def video_extract_segment_screenshots(
+        self,
+        path: str,
+        segments: list[dict[str, object]],
+        screenshots_per_segment: int = 1,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_local_analysis(
+            "video_extract_segment_screenshots",
+            VideoSegmentScreenshotsData,
+            path=path,
+            segments=segments,
+            screenshots_per_segment=screenshots_per_segment,
+        )
+
+    def video_segment_from_speech(
+        self,
+        path: str,
+        language: str | None = None,
+        max_segment_sec: float = 15,
+        screenshots_per_segment: int = 1,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_local_analysis(
+            "video_segment_from_speech",
+            VideoSegmentationData,
+            path=path,
+            language=language,
+            max_segment_sec=max_segment_sec,
+            screenshots_per_segment=screenshots_per_segment,
+        )
+
+    def video_segment_visual(
+        self,
+        path: str,
+        segment_mode: str = "shots",
+        window_sec: float = 8,
+        screenshots_per_segment: int = 1,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_local_analysis(
+            "video_segment_visual",
+            VideoSegmentationData,
+            path=path,
+            segment_mode=segment_mode,
+            window_sec=window_sec,
+            screenshots_per_segment=screenshots_per_segment,
+        )
+
+    def video_segment_audio_visual(
+        self,
+        path: str,
+        min_silence_sec: float = 0.7,
+        screenshots_per_segment: int = 1,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_local_analysis(
+            "video_segment_audio_visual",
+            VideoSegmentationData,
+            path=path,
+            min_silence_sec=min_silence_sec,
+            screenshots_per_segment=screenshots_per_segment,
+        )
+
+    def _invoke_local_analysis(
+        self,
+        method_name: str,
+        payload_model: type[PayloadModelT],
+        **kwargs: object,
+    ) -> ToolResultEnvelope:
+        try:
+            if "screenshots_per_segment" in kwargs and int(kwargs["screenshots_per_segment"]) <= 0:
+                raise ValueError("screenshots_per_segment must be greater than 0.")
+            analyzer_method = getattr(self.media_analyzer, method_name)
+            result = analyzer_method(**kwargs)
+            payload = payload_model.model_validate(result["data"])
+        except FileNotFoundError as exc:
+            return ToolResultEnvelope(
+                success=False,
+                error=BridgeError(
+                    category="object_not_found",
+                    message=str(exc),
+                ),
+            )
+        except ValueError as exc:
+            return ToolResultEnvelope(
+                success=False,
+                error=BridgeError(
+                    category="validation_error",
+                    message=str(exc),
+                ),
+            )
+        except Exception as exc:
+            return ToolResultEnvelope(
+                success=False,
+                error=BridgeError(
+                    category="execution_failure",
+                    message="Local media analysis failed.",
+                    details={
+                        "exception": str(exc),
+                        "method_name": method_name,
+                    },
+                ),
+            )
+        return ToolResultEnvelope(
+            success=True,
+            data=(
+                result["data"]
+                if method_name in {"audio_transcribe_segments", "video_segment_from_speech"}
+                else payload.model_dump(mode="json", exclude_none=True, exclude_defaults=True)
+            ),
+            warnings=result.get("warnings", []),
+            meta={"local_analysis": True, "tool_name": method_name},
         )
 
     def _invoke_command(

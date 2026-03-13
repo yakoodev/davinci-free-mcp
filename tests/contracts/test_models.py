@@ -1,6 +1,12 @@
 from davinci_free_mcp.contracts import (
+    AudioEventsData,
+    AudioProbeData,
+    AudioTranscriptionData,
+    TranscriptSidecarData,
     BridgeCommand,
     BridgeResult,
+    VideoSegmentationData,
+    VideoShotsData,
     ResolveMarkerInspectData,
     ResolveMarkerRangeListData,
     ResolveMediaClipInspectPathData,
@@ -334,3 +340,187 @@ def test_timeline_item_move_data_round_trip() -> None:
     assert restored.moved is True
     assert restored.source_item.track_index == 1
     assert restored.item.track_index == 2
+
+
+def test_audio_probe_data_round_trip() -> None:
+    payload = AudioProbeData.model_validate(
+        {
+            "source": "C:/media/test.wav",
+            "analysis_id": "abc123",
+            "artifacts_dir": "C:/runtime/analysis/abc123",
+            "media": {
+                "duration_sec": 3.5,
+                "sample_rate": 48000,
+                "channels": 2,
+                "codec": "pcm",
+                "bit_rate": 1536000,
+            },
+            "audio": {
+                "has_audio": True,
+                "speech_likelihood": 0.8,
+                "silence_ratio": 0.1,
+            },
+            "artifacts": [{"kind": "json", "path": "C:/runtime/analysis/abc123/manifest.json", "label": "manifest"}],
+        }
+    )
+
+    restored = AudioProbeData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.media.sample_rate == 48000
+    assert restored.audio.has_audio is True
+
+
+def test_audio_transcription_data_round_trip() -> None:
+    payload = AudioTranscriptionData.model_validate(
+        {
+            "source": "C:/media/test.wav",
+            "analysis_id": "abc123",
+            "artifacts_dir": "C:/runtime/analysis/abc123",
+            "transcript_status": "no_speech_detected",
+            "segments": [],
+            "artifacts": [{"kind": "text", "path": "C:/runtime/analysis/abc123/transcript.txt", "label": "transcript_text"}],
+        }
+    )
+
+    restored = AudioTranscriptionData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.transcript_status == "no_speech_detected"
+    assert restored.segments == []
+
+
+def test_audio_events_data_round_trip() -> None:
+    payload = AudioEventsData.model_validate(
+        {
+            "source": "C:/media/test.wav",
+            "analysis_id": "abc123",
+            "artifacts_dir": "C:/runtime/analysis/abc123",
+            "summary": {
+                "speech_detected": False,
+                "music_detected": True,
+                "silence_ranges_count": 1,
+            },
+            "events": [
+                {
+                    "start": 0.0,
+                    "end": 1.0,
+                    "event_type": "music_like",
+                    "energy": 1200.0,
+                    "label": "Music-like segment",
+                }
+            ],
+            "artifacts": [{"kind": "json", "path": "C:/runtime/analysis/abc123/events.json", "label": "events"}],
+        }
+    )
+
+    restored = AudioEventsData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.summary.music_detected is True
+    assert restored.events[0].event_type == "music_like"
+
+
+def test_video_shots_data_round_trip() -> None:
+    payload = VideoShotsData.model_validate(
+        {
+            "source": "C:/media/test.mp4",
+            "analysis_id": "abc123",
+            "artifacts_dir": "C:/runtime/analysis/abc123",
+            "shots": [
+                {
+                    "shot_index": 0,
+                    "start": 0.0,
+                    "end": 2.0,
+                    "segment_source": "scene",
+                    "visual_features": {
+                        "scene_change": True,
+                        "motion_score": 0.2,
+                        "black_frame_ratio": 0.0,
+                    },
+                }
+            ],
+            "artifacts": [{"kind": "json", "path": "C:/runtime/analysis/abc123/segments.json", "label": "shots"}],
+        }
+    )
+
+    restored = VideoShotsData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.shots[0].segment_source == "scene"
+    assert restored.shots[0].visual_features.motion_score == 0.2
+
+
+def test_video_segmentation_data_round_trip() -> None:
+    payload = VideoSegmentationData.model_validate(
+        {
+            "source": "C:/media/test.mp4",
+            "analysis_id": "abc123",
+            "artifacts_dir": "C:/runtime/analysis/abc123",
+            "segmentation_mode": "audio_visual",
+            "segments": [
+                {
+                    "segment_index": 0,
+                    "start": 1.0,
+                    "end": 3.0,
+                    "segment_source": "audio_event",
+                    "transcript": None,
+                    "audio_event": "music_like",
+                    "audio_features": {
+                        "speech_detected": False,
+                        "music_detected": True,
+                        "silence": False,
+                        "energy": 0.7,
+                    },
+                    "visual_features": {
+                        "scene_change": True,
+                        "motion_score": 0.4,
+                        "black_frame_ratio": 0.0,
+                    },
+                    "source_track_indexes": [1],
+                    "screenshots": [
+                        {
+                            "path": "C:/runtime/analysis/abc123/screenshots/1.jpg",
+                            "timestamp_sec": 2.0,
+                            "kind": "midpoint",
+                        }
+                    ],
+                }
+            ],
+            "artifacts": [{"kind": "json", "path": "C:/runtime/analysis/abc123/segments.json", "label": "segments"}],
+        }
+    )
+
+    restored = VideoSegmentationData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.segmentation_mode == "audio_visual"
+    assert restored.segments[0].audio_event == "music_like"
+
+
+def test_transcript_sidecar_data_round_trip() -> None:
+    payload = TranscriptSidecarData.model_validate(
+        {
+            "source": "C:/media/test.mp4",
+            "created_at": "2026-03-13T16:20:00Z",
+            "engine": {
+                "name": "faster-whisper",
+                "model": "base",
+                "device": "cpu",
+                "compute_type": "int8",
+            },
+            "language": "ru",
+            "duration_sec": 101.4,
+            "transcript_status": "ok",
+            "segments": [
+                {
+                    "start": 0.5,
+                    "end": 1.5,
+                    "text": "пример",
+                    "confidence": 0.87,
+                    "track_index": 1,
+                }
+            ],
+        }
+    )
+
+    restored = TranscriptSidecarData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.engine.name == "faster-whisper"
+    assert restored.segments[0].text == "пример"
+    assert restored.segments[0].track_index == 1

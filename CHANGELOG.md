@@ -4,7 +4,17 @@
 
 ## Unreleased
 
-- Пока нет незарелизенных записей.
+- Добавлены low-level MCP tools для локального анализа аудио и видео: `audio_probe`, `audio_transcribe_segments`, `audio_detect_events`, `video_probe`, `video_detect_shots`, `video_extract_segment_screenshots`, `video_segment_from_speech`, `video_segment_visual`, `video_segment_audio_visual`.
+- Добавлен локальный media-analysis слой вне Resolve bridge с сохранением артефактов в `runtime/analysis/<analysis_id>/`.
+- Добавлены контракты и тесты для segment-oriented audio/video результатов, включая voiced и no-speech video сценарии.
+- `audio_transcribe_segments` и `video_segment_from_speech` теперь автоматически создают и переиспользуют `*.transcript.json` sidecar рядом с исходным файлом через `faster-whisper`.
+- Docker image теперь включает `ffmpeg`, а speech runtime настраивается через `DFMCP_TRANSCRIBE_*`.
+- Исправлен `video_segment_audio_visual`, чтобы без reliable shot data сохранять реальные границы audio events вместо растяжки на весь клип.
+- `video_segment_from_speech` теперь транскрибирует каждую audio track отдельно, сохраняет merged multi-track sidecar и пишет проверяемую копию `transcript.json` в `runtime/analysis/<analysis_id>/`.
+- Speech JSON упрощен: sidecar и speech tool outputs теперь используют один плоский массив `segments` с базовыми полями `start`, `end`, `text`, `track_index` и опциональным `screenshot_path`.
+- Таймкоды speech-сегментов для видео теперь компенсируют per-track `start_time`, чтобы уменьшить рассинхрон между аудиодорожками; для обычных аудиофайлов смещение остается нулевым.
+- `docker-compose.yml` теперь монтирует `C:\Users\Yakoo\Videos\NVIDIA\Counter-strike 2` в контейнер как `/videos/cs2` для live MCP-проверок без `docker cp`.
+- JSON-артефакты media-analysis теперь пишутся как читаемый UTF-8 без `\uXXXX`-экранирования кириллицы.
 
 ## История изменений
 

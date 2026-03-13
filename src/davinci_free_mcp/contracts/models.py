@@ -413,3 +413,201 @@ class ToolResultEnvelope(BaseModel):
     error: BridgeError | None = None
     warnings: list[str] = Field(default_factory=list)
     meta: dict[str, Any] = Field(default_factory=dict)
+
+
+MediaArtifactKind = Literal["json", "image", "audio", "text"]
+MediaScreenshotKind = Literal["midpoint", "boundary", "peak_motion"]
+MediaSegmentSource = Literal["speech", "audio_event", "scene", "fixed_window"]
+TranscriptStatus = Literal["ok", "no_speech_detected", "low_confidence"]
+VideoSegmentMode = Literal["shots", "fixed_window"]
+VideoSegmentationMode = Literal["speech", "visual", "audio_visual"]
+
+
+class MediaAnalysisArtifact(BaseModel):
+    kind: MediaArtifactKind
+    path: str
+    label: str
+
+
+class MediaAnalysisManifest(BaseModel):
+    tool_name: str
+    source: str
+    analysis_id: str
+    artifacts_dir: str
+    created_at: str
+    input_params: dict[str, Any] = Field(default_factory=dict)
+    artifacts: list[MediaAnalysisArtifact] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class MediaSegmentScreenshot(BaseModel):
+    path: str
+    timestamp_sec: float
+    kind: MediaScreenshotKind
+
+
+class AudioFeatureFlags(BaseModel):
+    speech_detected: bool
+    music_detected: bool
+    silence: bool
+    energy: float
+
+
+class VideoFeatureFlags(BaseModel):
+    scene_change: bool
+    motion_score: float
+    black_frame_ratio: float
+
+
+class SegmentTimeRange(BaseModel):
+    start: float
+    end: float
+
+
+class AudioProbeMediaData(BaseModel):
+    duration_sec: float
+    sample_rate: int
+    channels: int
+    codec: str
+    bit_rate: int
+
+
+class AudioProbeAudioData(BaseModel):
+    has_audio: bool
+    speech_likelihood: float
+    silence_ratio: float
+
+
+class AudioTranscriptionSegment(BaseModel):
+    start: float
+    end: float
+    text: str
+    confidence: float | None = None
+    segment_source: Literal["speech"] = "speech"
+    track_index: int | None = None
+    screenshot_path: str | None = None
+
+
+class TranscriptSidecarSegment(BaseModel):
+    start: float
+    end: float
+    text: str
+    confidence: float | None = None
+    track_index: int | None = None
+    screenshot_path: str | None = None
+
+
+class TranscriptSidecarEngine(BaseModel):
+    name: str
+    model: str
+    device: str
+    compute_type: str
+
+
+class TranscriptSidecarData(BaseModel):
+    source: str
+    created_at: str
+    engine: TranscriptSidecarEngine
+    language: str | None = None
+    duration_sec: float = 0.0
+    transcript_status: TranscriptStatus
+    segments: list[TranscriptSidecarSegment] = Field(default_factory=list)
+
+
+class AudioEventSummary(BaseModel):
+    start: float
+    end: float
+    event_type: Literal["silence", "music_like", "noise", "impact", "high_energy", "low_energy"]
+    energy: float
+    label: str
+
+
+class AudioAnalysisSummary(BaseModel):
+    speech_detected: bool
+    music_detected: bool
+    silence_ranges_count: int
+
+
+class VideoProbeMediaData(BaseModel):
+    duration_sec: float
+    fps: float
+    width: int
+    height: int
+    video_codec: str
+    audio_codec: str | None = None
+
+
+class VideoProbeTracksData(BaseModel):
+    has_video: bool
+    has_audio: bool
+
+
+class VideoShotSummary(BaseModel):
+    shot_index: int
+    start: float
+    end: float
+    segment_source: Literal["scene"]
+    visual_features: VideoFeatureFlags
+
+
+class MediaSegmentSummary(BaseModel):
+    segment_index: int | None = None
+    start: float
+    end: float
+    segment_source: MediaSegmentSource | None = None
+    text: str | None = None
+    transcript: str | None = None
+    audio_event: str | None = None
+    audio_features: AudioFeatureFlags | None = None
+    visual_features: VideoFeatureFlags | None = None
+    track_index: int | None = None
+    screenshot_path: str | None = None
+    source_track_indexes: list[int] = Field(default_factory=list)
+    screenshots: list[MediaSegmentScreenshot] = Field(default_factory=list)
+
+
+class SegmentScreenshotSummary(BaseModel):
+    start: float
+    end: float
+    screenshots: list[MediaSegmentScreenshot] = Field(default_factory=list)
+
+
+class BaseMediaAnalysisData(BaseModel):
+    source: str
+    analysis_id: str
+    artifacts_dir: str
+    artifacts: list[MediaAnalysisArtifact] = Field(default_factory=list)
+
+
+class AudioProbeData(BaseMediaAnalysisData):
+    media: AudioProbeMediaData
+    audio: AudioProbeAudioData
+
+
+class AudioTranscriptionData(BaseMediaAnalysisData):
+    transcript_status: TranscriptStatus
+    segments: list[AudioTranscriptionSegment] = Field(default_factory=list)
+
+
+class AudioEventsData(BaseMediaAnalysisData):
+    events: list[AudioEventSummary] = Field(default_factory=list)
+    summary: AudioAnalysisSummary
+
+
+class VideoProbeData(BaseMediaAnalysisData):
+    media: VideoProbeMediaData
+    tracks: VideoProbeTracksData
+
+
+class VideoShotsData(BaseMediaAnalysisData):
+    shots: list[VideoShotSummary] = Field(default_factory=list)
+
+
+class VideoSegmentScreenshotsData(BaseMediaAnalysisData):
+    segments: list[SegmentScreenshotSummary] = Field(default_factory=list)
+
+
+class VideoSegmentationData(BaseMediaAnalysisData):
+    segmentation_mode: VideoSegmentationMode
+    transcript_status: TranscriptStatus | None = None
+    segments: list[MediaSegmentSummary] = Field(default_factory=list)

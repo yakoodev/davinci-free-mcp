@@ -28,6 +28,11 @@ class AppSettings(BaseSettings):
     mcp_path: str = "/mcp"
     mcp_json_response: bool = True
     mcp_stateless_http: bool = True
+    transcribe_provider: str = "faster_whisper"
+    transcribe_model: str = "base"
+    transcribe_device: str = "cpu"
+    transcribe_compute_type: str = "int8"
+    transcribe_beam_size: int = 1
 
     @property
     def spool_dir(self) -> Path:
@@ -48,6 +53,10 @@ class AppSettings(BaseSettings):
     @property
     def logs_dir(self) -> Path:
         return self.runtime_dir / "logs"
+
+    @property
+    def analysis_dir(self) -> Path:
+        return self.runtime_dir / "analysis"
 
     @property
     def status_dir(self) -> Path:

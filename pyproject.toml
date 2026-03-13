@@ -19,6 +19,9 @@ dependencies = [
 dev = [
   "pytest>=8.0",
 ]
+speech = [
+  "faster-whisper>=1.1.0",
+]
 
 [project.scripts]
 davinci-free-mcp = "davinci_free_mcp.server.main:main"

@@ -18,5 +18,6 @@ services:
       DFMCP_MCP_JSON_RESPONSE: "true"
       DFMCP_MCP_STATELESS_HTTP: "true"
     volumes:
-      - ./runtime:/app/runtime
+      - "./runtime:/app/runtime"
+      - "C:/Users/Yakoo/Videos/NVIDIA/Counter-strike 2:/videos/cs2"
     restart: unless-stopped

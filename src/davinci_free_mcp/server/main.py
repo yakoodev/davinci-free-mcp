@@ -226,6 +226,132 @@ def create_server(
         )
 
     @server.tool()
+    def audio_probe(path: str, timeout_ms: int = 5000) -> dict[str, object]:
+        """Inspect local audio metadata and high-level audio flags."""
+
+        return backend_service.audio_probe(path, timeout_ms).model_dump(mode="json")
+
+    @server.tool()
+    def audio_transcribe_segments(
+        path: str,
+        language: str | None = None,
+        max_segment_sec: float = 15,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Transcribe local audio into speech segments when transcript data is available."""
+
+        return backend_service.audio_transcribe_segments(
+            path,
+            language=language,
+            max_segment_sec=max_segment_sec,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def audio_detect_events(
+        path: str,
+        min_silence_sec: float = 0.7,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Detect low-level events in local audio without transcript output."""
+
+        return backend_service.audio_detect_events(
+            path,
+            min_silence_sec=min_silence_sec,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def video_probe(path: str, timeout_ms: int = 5000) -> dict[str, object]:
+        """Inspect local video metadata and track presence."""
+
+        return backend_service.video_probe(path, timeout_ms).model_dump(mode="json")
+
+    @server.tool()
+    def video_detect_shots(
+        path: str,
+        cut_threshold: float = 0.35,
+        min_shot_sec: float = 1.0,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Detect scene-like shot ranges for local video."""
+
+        return backend_service.video_detect_shots(
+            path,
+            cut_threshold=cut_threshold,
+            min_shot_sec=min_shot_sec,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def video_extract_segment_screenshots(
+        path: str,
+        segments: list[dict[str, object]],
+        screenshots_per_segment: int = 1,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Extract screenshots for explicit local video time ranges."""
+
+        return backend_service.video_extract_segment_screenshots(
+            path,
+            segments=segments,
+            screenshots_per_segment=screenshots_per_segment,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def video_segment_from_speech(
+        path: str,
+        language: str | None = None,
+        max_segment_sec: float = 15,
+        screenshots_per_segment: int = 1,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Build speech-driven local video segments with screenshots."""
+
+        return backend_service.video_segment_from_speech(
+            path,
+            language=language,
+            max_segment_sec=max_segment_sec,
+            screenshots_per_segment=screenshots_per_segment,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def video_segment_visual(
+        path: str,
+        segment_mode: str = "shots",
+        window_sec: float = 8,
+        screenshots_per_segment: int = 1,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Build visual-only local video segments with screenshots."""
+
+        return backend_service.video_segment_visual(
+            path,
+            segment_mode=segment_mode,
+            window_sec=window_sec,
+            screenshots_per_segment=screenshots_per_segment,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def video_segment_audio_visual(
+        path: str,
+        min_silence_sec: float = 0.7,
+        screenshots_per_segment: int = 1,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Build audio-event-aligned local video segments with screenshots."""
+
+        return backend_service.video_segment_audio_visual(
+            path,
+            min_silence_sec=min_silence_sec,
+            screenshots_per_segment=screenshots_per_segment,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
     def timeline_append_clips(
         clip_names: list[str],
         timeline_name: str | None = None,
