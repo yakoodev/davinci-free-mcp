@@ -192,6 +192,11 @@ class ResolveProjectCurrentData(BaseModel):
     project: ResolveProjectStatus
 
 
+class ResolveProjectOpenData(BaseModel):
+    opened: bool
+    project: ResolveProjectStatus
+
+
 class ResolveProjectListData(BaseModel):
     projects: list[ResolveProjectSummary] = Field(default_factory=list)
 

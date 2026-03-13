@@ -22,6 +22,9 @@ dev = [
 
 [project.scripts]
 davinci-free-mcp = "davinci_free_mcp.server.main:main"
+davinci-free-mcp-external-agent = "davinci_free_mcp.external_agent.runner:main"
+davinci-free-mcp-external-diagnostics = "davinci_free_mcp.external_agent.diagnostics:main"
+davinci-free-mcp-startup = "davinci_free_mcp.external_agent.startup:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/davinci_free_mcp"]

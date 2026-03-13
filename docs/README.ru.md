@@ -62,17 +62,78 @@ C:\Users\Yakoo\AppData\Roaming\Blackmagic Design\DaVinci Resolve\Support\Fusion\
 ```
 
 3. Открой DaVinci Resolve Free
-4. Запусти:
+Лучше запускать его так:
+
+```powershell
+.\scripts\dev_start_resolve_with_python.ps1
+```
+
+Это добавляет Python 3.11 в `PATH` именно для процесса Resolve. На этой машине без этого `Workspace -> Scripts` может быть отключен.
+
+4. Открой тестовый проект
+5. Запусти:
 
 ```text
 Workspace -> Scripts -> Utility -> resolve_executor_bootstrap
 ```
 
-5. Проверь диагностику:
+6. Проверь диагностику:
 
 ```powershell
 .\scripts\dev_diagnostics.ps1
 ```
+
+## Рекомендуемый live-цикл после новых фич
+
+Если ты поменял backend, bridge или `scripts/resolve_executor_bootstrap.py`, используй такой порядок:
+
+1. Полностью закрыть Resolve и хвосты:
+
+```powershell
+.\scripts\dev_kill_davinci.ps1
+```
+
+2. Если менялся bootstrap, переустановить его:
+
+```powershell
+.\scripts\dev_install_executor.ps1
+```
+
+3. Пересоздать backend-контейнер:
+
+```powershell
+docker compose down
+.\scripts\dev_up.ps1
+```
+
+4. Запустить Resolve через:
+
+```powershell
+.\scripts\dev_start_resolve_with_python.ps1
+```
+
+5. Открыть тестовый проект
+Текущий рабочий вариант на этой машине:
+
+- `Untitled Project 5`
+
+6. Включить скрипт:
+
+```text
+Workspace -> Scripts -> Utility -> resolve_executor_bootstrap
+```
+
+7. Прогнать:
+
+```powershell
+.\scripts\dev_diagnostics.ps1
+```
+
+Нормальный результат:
+
+- `resolve_health.success = true`
+- `executor.running = true`
+- открыт нужный проект
 
 ## Как понять, что всё работает
 

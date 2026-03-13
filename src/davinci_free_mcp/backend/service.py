@@ -17,6 +17,7 @@ from davinci_free_mcp.contracts import (
     ResolveMediaPoolListData,
     ResolveProjectCurrentData,
     ResolveProjectListData,
+    ResolveProjectOpenData,
     ResolveTimelineAppendClipsData,
     ResolveTimelineCreateEmptyData,
     ResolveTimelineCurrentData,
@@ -53,6 +54,18 @@ class ResolveBackendService:
         return self._invoke_command(
             "project_list",
             ResolveProjectListData,
+            timeout_ms=timeout_ms,
+        )
+
+    def project_open(
+        self,
+        project_name: str,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "project_open",
+            ResolveProjectOpenData,
+            payload={"project_name": project_name},
             timeout_ms=timeout_ms,
         )
 

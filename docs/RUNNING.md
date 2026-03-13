@@ -50,6 +50,15 @@ On Windows host, start Resolve normally or from PowerShell:
 
 Resolve must be started on the host, not in Docker.
 
+For embedded Python scripts, the safer option on this machine is:
+
+```powershell
+.\scripts\dev_start_resolve_with_python.ps1
+```
+
+This starts Resolve with Python 3.11 injected into `PATH` for that process.
+Without that step, `Workspace -> Scripts` may stay disabled even though the bootstrap file is installed.
+
 ## 3. Install and start the internal executor inside Resolve
 
 Use the standalone Python 3.6-compatible bootstrap script:
@@ -115,6 +124,62 @@ runtime/status/executor_status.json
 ```
 
 That status file now includes `instance_id` and lock metadata so duplicate writers are easier to spot.
+
+## Recommended live retest flow after feature changes
+
+When you have changed backend code, bridge code, or `scripts/resolve_executor_bootstrap.py`, use this exact cycle:
+
+1. Fully close DaVinci Resolve and stale helper processes:
+
+```powershell
+.\scripts\dev_kill_davinci.ps1
+```
+
+2. If `scripts/resolve_executor_bootstrap.py` changed, reinstall it:
+
+```powershell
+.\scripts\dev_install_executor.ps1
+```
+
+3. Recreate the backend container so the live backend matches your latest code:
+
+```powershell
+docker compose down
+.\scripts\dev_up.ps1
+```
+
+4. Start Resolve through the Python-aware helper:
+
+```powershell
+.\scripts\dev_start_resolve_with_python.ps1
+```
+
+5. Open the live test project in Resolve.
+Recommended current project on this machine:
+
+- `Untitled Project 5`
+
+6. Start the embedded bootstrap from:
+
+```text
+Workspace -> Scripts -> Utility -> resolve_executor_bootstrap
+```
+
+7. Verify that the executor really came up:
+
+```powershell
+.\scripts\dev_diagnostics.ps1
+```
+
+Expected minimum result:
+
+- `resolve_health.success = true`
+- `resolve_health.data.executor.running = true`
+- `project_current.data.project.name = <your live test project>`
+
+8. Run live MCP checks or smoke tests.
+
+This flow is currently the most reliable host-side retest path because it avoids the stale-process problem, forces the backend to match the latest code, and starts Resolve with a Python-capable environment so `Workspace -> Scripts` is available.
 
 ## 4. Run the first diagnostic check
 
@@ -182,6 +247,7 @@ The current tools are:
 - `resolve_health`
 - `project_current`
 - `project_list`
+- `project_open`
 - `timeline_list`
 
 ## 6. Connect to Codex Desktop
@@ -201,6 +267,7 @@ Practical checklist:
    - `resolve_health`
    - `project_current`
    - `project_list`
+   - `project_open`
    - `timeline_list`
 
 If your build uses the shared Codex config file instead of an in-app form, configure the MCP server there to use the same URL.
@@ -270,7 +337,59 @@ Expected result:
 - `resolve_health.success = true`
 - `project_current.success = true`
 - `project_list.success = true`
+- `project_open.success = true` when called with an existing project name
 - `timeline_list.success = true`
+
+## Agent live automation
+
+For agent-only live validation, use the host helper instead of opening the project by hand:
+
+```powershell
+.\scripts\dev_agent_live_run.ps1 -ProjectName "Demo Project" -Command "pytest tests\integration -q"
+```
+
+What it does:
+
+- reuses a healthy executor when available
+- otherwise recovers stale host runtime, starts Resolve, and waits for the embedded executor
+- opens the requested project through the backend `project_open` command
+- runs the supplied command on the host outside MCP
+
+Important:
+
+- the backend container must already be running
+- bootstrap installation can be refreshed with `-ReinstallBootstrap`
+- if embedded scripts are disabled in Resolve, restart Resolve with `.\scripts\dev_start_resolve_with_python.ps1`
+- the most reliable proven path on this machine is still: start Resolve with Python in `PATH`, open the test project, then launch `resolve_executor_bootstrap` from the menu
+
+For a smoke-style wrapper around the same flow:
+
+```powershell
+.\scripts\dev_smoke_live.ps1 -ProjectName "Demo Project" -Command "pytest tests\integration -q"
+```
+
+## Agent external scripting fallback
+
+If embedded executor startup is blocked but Resolve external scripting is available on the host, use the agent-only external runner:
+
+```powershell
+.\scripts\dev_external_scripting_diagnostics.ps1 -ProjectName "Demo Project"
+.\scripts\dev_agent_external_run.ps1 -ProjectName "Demo Project" -Command "pytest tests\integration -q"
+```
+
+What it does:
+
+- starts Resolve when needed
+- waits for `DaVinciResolveScript.scriptapp("Resolve")` to become available
+- opens the requested project through `LoadProject(projectName)`
+- confirms `GetCurrentProject()` before running the host command
+
+Important:
+
+- this is an `agent-only` fallback path
+- it does not use MCP or the embedded executor
+- if diagnostics still report `resolve_connected = false`, the next fallback is UI automation
+- `-NoGui` is available for experiments, but should not be the default unless proven stable on this machine
 
 ## Failure isolation
 

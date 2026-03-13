@@ -18,6 +18,7 @@ def test_create_server_smoke() -> None:
         "resolve_health",
         "project_current",
         "project_list",
+        "project_open",
         "timeline_list",
         "timeline_current",
         "timeline_create_empty",

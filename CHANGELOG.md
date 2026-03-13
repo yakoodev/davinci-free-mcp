@@ -21,6 +21,27 @@ The format is intentionally simple:
 - extended backend and executor contracts for media pool listings, imports, timeline append results, and grouped track item inspection
 - added integration coverage for timeline creation, media import, append flows, ambiguous clip detection, and grouped timeline track inspection
 
+## 2026-03-12 - Agent live automation and project opening
+
+- added low-level `project_open` across executor, backend, and MCP server
+- added agent-only host helper `scripts/dev_agent_live_run.ps1` to wait for executor readiness, open a target project, and run a host command outside MCP
+- added `scripts/dev_smoke_live.ps1` for non-interactive live smoke runs
+- added agent-only external scripting fallback with `scripts/dev_external_scripting_diagnostics.ps1` and `scripts/dev_agent_external_run.ps1`
+- updated docs to recommend the new live automation flow for agent-driven validation
+
+## 2026-03-12 - Embedded script launch stabilization
+
+- added `scripts/dev_start_resolve_with_python.ps1` to start Resolve with Python 3.11 present in `PATH`
+- confirmed that embedded `Workspace -> Scripts` availability on this machine depends on launching Resolve with a usable Python in `PATH`
+- documented the reliable retest cycle for live feature validation:
+  - kill stale Resolve processes
+  - reinstall bootstrap when needed
+  - recreate the backend container
+  - start Resolve with Python-aware environment
+  - open the test project
+  - launch `resolve_executor_bootstrap`
+  - run diagnostics and MCP smoke checks
+
 ## 2026-03-12 - MVP foundation
 
 - created the initial MCP-first project scaffold for DaVinci Resolve Free

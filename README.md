@@ -22,7 +22,7 @@ The repository currently contains a working MVP vertical slice:
 - `file_queue` bridge over a shared runtime directory
 - prototype `local_http` bridge for an executor-hosted REST server inside Resolve
 - standalone internal executor for Resolve Free
-- project and timeline tools: `resolve_health`, `project_current`, `project_list`, `timeline_list`, `timeline_current`, `timeline_create_empty`
+- project and timeline tools: `resolve_health`, `project_current`, `project_list`, `project_open`, `timeline_list`, `timeline_current`, `timeline_create_empty`
 - media tools: `media_pool_list`, `media_import`
 - edit structure tools: `timeline_append_clips`, `timeline_items_list`
 - console-first executor status inside DaVinci Resolve
@@ -124,19 +124,48 @@ The highest-risk part of the system is not the MCP server. It is the handshake b
 .\scripts\dev_install_executor.ps1
 ```
 
-3. Launch DaVinci Resolve Free and run:
+3. Launch DaVinci Resolve Free with the Python-aware helper:
+
+```powershell
+.\scripts\dev_start_resolve_with_python.ps1
+```
+
+4. Open the live test project and run:
 
 ```text
 Workspace -> Scripts -> Utility -> resolve_executor_bootstrap
 ```
 
-4. Check the end-to-end diagnostic:
+5. Check the end-to-end diagnostic:
 
 ```powershell
 .\scripts\dev_diagnostics.ps1
 ```
 
 Detailed runtime instructions live in `docs/RUNNING.md`.
+
+Recommended retest flow after changing live Resolve features:
+
+1. `.\scripts\dev_kill_davinci.ps1`
+2. if needed, `.\scripts\dev_install_executor.ps1`
+3. recreate backend: `docker compose down` then `.\scripts\dev_up.ps1`
+4. `.\scripts\dev_start_resolve_with_python.ps1`
+5. open `Untitled Project 5` or your current test project
+6. launch `resolve_executor_bootstrap`
+7. run `.\scripts\dev_diagnostics.ps1`
+
+For agent-only live validation against an existing Resolve project:
+
+```powershell
+.\scripts\dev_agent_live_run.ps1 -ProjectName "Demo Project" -Command "pytest tests\integration -q"
+```
+
+For agent-only fallback automation via external scripting access:
+
+```powershell
+.\scripts\dev_external_scripting_diagnostics.ps1 -ProjectName "Demo Project"
+.\scripts\dev_agent_external_run.ps1 -ProjectName "Demo Project" -Command "pytest tests\integration -q"
+```
 
 To experiment with the internal REST prototype, copy `.env.example` to `.env` and set:
 

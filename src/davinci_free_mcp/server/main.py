@@ -48,7 +48,7 @@ def create_server(
     server_kwargs = {
         "instructions": (
             "MCP-first bridge for DaVinci Resolve Free. "
-            "The current toolset exposes low-level read-only project and timeline tools."
+            "The current toolset exposes low-level project, media, and timeline tools."
         ),
     }
     if MCP_VARIANT == "fastmcp":
@@ -79,6 +79,14 @@ def create_server(
         """Return projects in the current project-manager folder context."""
 
         return backend_service.project_list(timeout_ms).model_dump(mode="json")
+
+    @server.tool()
+    def project_open(project_name: str, timeout_ms: int = 5000) -> dict[str, object]:
+        """Open a project by name in the current Resolve database context."""
+
+        return backend_service.project_open(project_name, timeout_ms).model_dump(
+            mode="json"
+        )
 
     @server.tool()
     def timeline_list(timeout_ms: int = 5000) -> dict[str, object]:
