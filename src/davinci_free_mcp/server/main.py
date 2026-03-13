@@ -171,6 +171,14 @@ def create_server(
         return backend_service.media_import(paths, timeout_ms).model_dump(mode="json")
 
     @server.tool()
+    def media_clip_inspect_path(path: str, timeout_ms: int = 5000) -> dict[str, object]:
+        """Inspect a clip by relative or absolute media-pool path."""
+
+        return backend_service.media_clip_inspect_path(path, timeout_ms).model_dump(
+            mode="json"
+        )
+
+    @server.tool()
     def timeline_append_clips(
         clip_names: list[str],
         timeline_name: str | None = None,
@@ -223,6 +231,22 @@ def create_server(
         ).model_dump(mode="json")
 
     @server.tool()
+    def timeline_track_items_list(
+        track_type: str,
+        track_index: int,
+        timeline_name: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Return items for one track on the target or current timeline."""
+
+        return backend_service.timeline_track_items_list(
+            track_type,
+            track_index,
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
     def marker_add(
         frame: int,
         name: str,
@@ -252,6 +276,20 @@ def create_server(
         """List markers on the current or specified timeline."""
 
         return backend_service.marker_list(
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def marker_inspect(
+        frame: int,
+        timeline_name: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Return one marker from the current or specified timeline by frame."""
+
+        return backend_service.marker_inspect(
+            frame,
             timeline_name=timeline_name,
             timeout_ms=timeout_ms,
         ).model_dump(mode="json")

@@ -203,6 +203,12 @@ class ResolveTimelineItemsListData(BaseModel):
     tracks: list[ResolveTimelineTrackSummary] = Field(default_factory=list)
 
 
+class ResolveTimelineTrackItemsData(BaseModel):
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    track: ResolveTimelineTrackSummary
+
+
 class ResolveTimelineInspectData(BaseModel):
     project: ResolveProjectStatus
     timeline: ResolveTimelineSummary
@@ -235,6 +241,12 @@ class ResolveMarkerListData(BaseModel):
     markers: list[ResolveMarkerSummary] = Field(default_factory=list)
 
 
+class ResolveMarkerInspectData(BaseModel):
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    marker: ResolveMarkerSummary
+
+
 class ResolveMarkerDeleteMarkerData(BaseModel):
     frame: int
 
@@ -248,6 +260,12 @@ class ResolveMarkerDeleteData(BaseModel):
 
 class ResolveMediaClipInspectData(BaseModel):
     folder: ResolveMediaPoolFolderSummary
+    clip: ResolveMediaClipDetail
+
+
+class ResolveMediaClipInspectPathData(BaseModel):
+    folder: ResolveMediaPoolFolderSummary
+    path: list[ResolveMediaPoolFolderSummary] = Field(default_factory=list)
     clip: ResolveMediaClipDetail
 
 

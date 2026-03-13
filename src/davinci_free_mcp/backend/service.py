@@ -14,8 +14,10 @@ from davinci_free_mcp.contracts import (
     BridgeResult,
     ResolveHealthData,
     ResolveMarkerDeleteData,
+    ResolveMarkerInspectData,
     ResolveMarkerListData,
     ResolveMediaClipInspectData,
+    ResolveMediaClipInspectPathData,
     ResolveMediaImportData,
     ResolveMediaPoolFolderStateData,
     ResolveMediaPoolListData,
@@ -29,6 +31,7 @@ from davinci_free_mcp.contracts import (
     ResolveTimelineCurrentData,
     ResolveTimelineInspectData,
     ResolveTimelineItemsListData,
+    ResolveTimelineTrackItemsData,
     ResolveTimelineListData,
     ResolveTimelineSetCurrentData,
     ToolResultEnvelope,
@@ -230,6 +233,21 @@ class ResolveBackendService:
             timeout_ms=timeout_ms,
         )
 
+    def timeline_track_items_list(
+        self,
+        track_type: str,
+        track_index: int,
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_track_items_list",
+            ResolveTimelineTrackItemsData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={"track_type": track_type, "track_index": track_index},
+            timeout_ms=timeout_ms,
+        )
+
     def timeline_inspect(
         self,
         timeline_name: str | None = None,
@@ -278,6 +296,20 @@ class ResolveBackendService:
             timeout_ms=timeout_ms,
         )
 
+    def marker_inspect(
+        self,
+        frame: int,
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "marker_inspect",
+            ResolveMarkerInspectData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={"frame": frame},
+            timeout_ms=timeout_ms,
+        )
+
     def marker_delete(
         self,
         frame: int,
@@ -301,6 +333,18 @@ class ResolveBackendService:
             "media_clip_inspect",
             ResolveMediaClipInspectData,
             payload={"clip_name": clip_name},
+            timeout_ms=timeout_ms,
+        )
+
+    def media_clip_inspect_path(
+        self,
+        path: str,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "media_clip_inspect_path",
+            ResolveMediaClipInspectPathData,
+            payload={"path": path},
             timeout_ms=timeout_ms,
         )
 

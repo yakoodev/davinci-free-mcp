@@ -1,8 +1,11 @@
 from davinci_free_mcp.contracts import (
     BridgeCommand,
     BridgeResult,
+    ResolveMarkerInspectData,
+    ResolveMediaClipInspectPathData,
     ResolveMediaPoolFolderStateData,
     ResolveTimelineInspectData,
+    ResolveTimelineTrackItemsData,
 )
 
 
@@ -72,3 +75,52 @@ def test_timeline_inspect_data_round_trip() -> None:
 
     assert restored.timeline.name == "Review"
     assert restored.marker_count == 4
+
+
+def test_timeline_track_items_data_round_trip() -> None:
+    payload = ResolveTimelineTrackItemsData.model_validate(
+        {
+            "project": {"open": True, "name": "Demo Project"},
+            "timeline": {"index": 1, "name": "Assembly"},
+            "track": {
+                "track_type": "video",
+                "track_index": 2,
+                "items": [{"item_index": 0, "name": "clip001.mov", "start_frame": 0, "end_frame": 100}],
+            },
+        }
+    )
+
+    restored = ResolveTimelineTrackItemsData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.track.track_index == 2
+    assert restored.track.items[0].name == "clip001.mov"
+
+
+def test_marker_inspect_data_round_trip() -> None:
+    payload = ResolveMarkerInspectData.model_validate(
+        {
+            "project": {"open": True, "name": "Demo Project"},
+            "timeline": {"index": 1, "name": "Assembly"},
+            "marker": {"frame": 24, "name": "Review", "color": "Blue", "duration": 1},
+        }
+    )
+
+    restored = ResolveMarkerInspectData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.marker.frame == 24
+    assert restored.marker.name == "Review"
+
+
+def test_media_clip_inspect_path_data_round_trip() -> None:
+    payload = ResolveMediaClipInspectPathData.model_validate(
+        {
+            "folder": {"name": "Closeups"},
+            "path": [{"name": "Master"}, {"name": "Selects"}, {"name": "Closeups"}],
+            "clip": {"name": "clip001.mov", "properties": {"File Path": "C:/media/clip001.mov"}},
+        }
+    )
+
+    restored = ResolveMediaClipInspectPathData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.path[-1].name == "Closeups"
+    assert restored.clip.properties["File Path"] == "C:/media/clip001.mov"

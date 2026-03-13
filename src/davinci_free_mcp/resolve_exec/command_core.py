@@ -37,13 +37,16 @@ class ResolveCommandCore(object):
             "media_pool_folder_path": self._handle_media_pool_folder_path,
             "media_pool_folder_open_path": self._handle_media_pool_folder_open_path,
             "media_clip_inspect": self._handle_media_clip_inspect,
+            "media_clip_inspect_path": self._handle_media_clip_inspect_path,
             "media_import": self._handle_media_import,
             "timeline_append_clips": self._handle_timeline_append_clips,
             "timeline_create_from_clips": self._handle_timeline_create_from_clips,
             "timeline_items_list": self._handle_timeline_items_list,
+            "timeline_track_items_list": self._handle_timeline_track_items_list,
             "timeline_inspect": self._handle_timeline_inspect,
             "marker_add": self._handle_marker_add,
             "marker_list": self._handle_marker_list,
+            "marker_inspect": self._handle_marker_inspect,
             "marker_delete": self._handle_marker_delete,
         }
 
@@ -711,6 +714,84 @@ class ResolveCommandCore(object):
             },
         )
 
+    def _handle_media_clip_inspect_path(self, command, resolve):
+        current_project = self._current_project(resolve)
+        if current_project is None:
+            return self._failure(
+                command["request_id"],
+                "no_project_open",
+                "No current project is open in Resolve.",
+            )
+
+        path_value = str(command["payload"].get("path") or "").strip()
+        if not path_value:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Clip path is required.",
+            )
+
+        media_pool = self._media_pool(current_project)
+        current_folder = self._current_media_pool_folder(current_project)
+        root_folder = self._safe_call(media_pool, "GetRootFolder") if media_pool is not None else None
+        if media_pool is None or current_folder is None or root_folder is None:
+            return self._failure(
+                command["request_id"],
+                "object_not_found",
+                "Current media pool folder is not available.",
+            )
+
+        normalized_path = str(path_value).replace("\\", "/")
+        path_segments = [segment.strip() for segment in normalized_path.split("/") if segment.strip()]
+        if not path_segments:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Clip path is required.",
+            )
+
+        clip_name = path_segments[-1]
+        folder_segments = path_segments[:-1]
+        if folder_segments:
+            folder_path = ("/" if normalized_path.startswith("/") else "") + "/".join(folder_segments)
+            target_folder, error = self._resolve_media_folder_by_path(
+                root_folder,
+                current_folder,
+                folder_path,
+            )
+            if error is not None:
+                return self._failure(
+                    command["request_id"],
+                    error["category"],
+                    error["message"],
+                    details=error.get("details"),
+                )
+        else:
+            target_folder = root_folder if normalized_path.startswith("/") else current_folder
+
+        clip, error = self._resolve_clip_by_name(target_folder, clip_name)
+        if error is not None:
+            details = dict(error.get("details") or {})
+            details["path"] = path_value
+            return self._failure(
+                command["request_id"],
+                error["category"],
+                error["message"],
+                details=details,
+            )
+
+        return self._success(
+            command["request_id"],
+            data={
+                "folder": {"name": self._safe_call(target_folder, "GetName") or "Current Folder"},
+                "path": self._media_pool_folder_path(root_folder, target_folder),
+                "clip": {
+                    "name": self._clip_name(clip) or clip_name,
+                    "properties": self._clip_string_properties(clip),
+                },
+            },
+        )
+
     def _handle_media_import(self, command, resolve):
         current_project = self._current_project(resolve)
         if current_project is None:
@@ -976,6 +1057,96 @@ class ResolveCommandCore(object):
             },
         )
 
+    def _handle_timeline_track_items_list(self, command, resolve):
+        current_project = self._current_project(resolve)
+        if current_project is None:
+            return self._failure(
+                command["request_id"],
+                "no_project_open",
+                "No current project is open in Resolve.",
+            )
+
+        timeline_name = command["target"].get("timeline")
+        if timeline_name:
+            timeline = self._resolve_timeline_by_name(current_project, str(timeline_name))
+        else:
+            timeline = self._safe_call(current_project, "GetCurrentTimeline")
+
+        if timeline is None:
+            if timeline_name:
+                return self._failure(
+                    command["request_id"],
+                    "object_not_found",
+                    "Timeline '%s' was not found." % timeline_name,
+                )
+            return self._failure(
+                command["request_id"],
+                "no_current_timeline",
+                "No current timeline is active in Resolve.",
+            )
+
+        track_type = str(command["payload"].get("track_type") or "").strip().lower()
+        if track_type not in ("video", "audio"):
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Track type must be 'video' or 'audio'.",
+            )
+
+        try:
+            track_index = int(command["payload"].get("track_index"))
+        except (TypeError, ValueError):
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Track index must be an integer.",
+            )
+
+        if track_index < 1:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Track index must be at least 1.",
+            )
+
+        track_count = self._safe_call(timeline, "GetTrackCount", track_type) or 0
+        if track_index > int(track_count):
+            return self._failure(
+                command["request_id"],
+                "object_not_found",
+                "Track %s %s was not found." % (track_type, track_index),
+                details={"track_type": track_type, "track_index": track_index},
+            )
+
+        items = self._safe_call(timeline, "GetItemListInTrack", track_type, track_index)
+        if not isinstance(items, list):
+            items = []
+
+        return self._success(
+            command["request_id"],
+            data={
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(current_project, "GetName"),
+                },
+                "timeline": self._timeline_summary(current_project, timeline),
+                "track": {
+                    "track_type": track_type,
+                    "track_index": track_index,
+                    "items": [
+                        {
+                            "item_index": item_index,
+                            "name": self._timeline_item_name(item)
+                            or "%s item %s" % (track_type, item_index),
+                            "start_frame": self._timeline_item_frame(item, "GetStart"),
+                            "end_frame": self._timeline_item_frame(item, "GetEnd"),
+                        }
+                        for item_index, item in enumerate(items)
+                    ],
+                },
+            },
+        )
+
     def _handle_timeline_inspect(self, command, resolve):
         current_project = self._current_project(resolve)
         if current_project is None:
@@ -1169,6 +1340,65 @@ class ResolveCommandCore(object):
                 },
                 "timeline": self._timeline_summary(current_project, timeline),
                 "markers": self._timeline_markers(timeline),
+            },
+        )
+
+    def _handle_marker_inspect(self, command, resolve):
+        current_project = self._current_project(resolve)
+        if current_project is None:
+            return self._failure(
+                command["request_id"],
+                "no_project_open",
+                "No current project is open in Resolve.",
+            )
+
+        frame = command["payload"].get("frame")
+        try:
+            frame_value = int(frame)
+        except (TypeError, ValueError):
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Marker frame must be an integer.",
+            )
+
+        timeline_name = command["target"].get("timeline")
+        if timeline_name:
+            timeline = self._resolve_timeline_by_name(current_project, str(timeline_name))
+        else:
+            timeline = self._safe_call(current_project, "GetCurrentTimeline")
+
+        if timeline is None:
+            if timeline_name:
+                return self._failure(
+                    command["request_id"],
+                    "object_not_found",
+                    "Timeline '%s' was not found." % timeline_name,
+                )
+            return self._failure(
+                command["request_id"],
+                "no_current_timeline",
+                "No current timeline is active in Resolve.",
+            )
+
+        marker = self._timeline_markers_by_frame(timeline).get(frame_value)
+        if marker is None:
+            return self._failure(
+                command["request_id"],
+                "object_not_found",
+                "Marker at frame %s was not found." % frame_value,
+                details={"frame": frame_value},
+            )
+
+        return self._success(
+            command["request_id"],
+            data={
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(current_project, "GetName"),
+                },
+                "timeline": self._timeline_summary(current_project, timeline),
+                "marker": marker,
             },
         )
 
