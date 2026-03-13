@@ -130,6 +130,11 @@ class ResolveTimelineCreateEmptyData(BaseModel):
     timeline: ResolveTimelineSummary
 
 
+class ResolveTimelineSetCurrentData(BaseModel):
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+
+
 class ResolveMediaPoolFolderSummary(BaseModel):
     name: str
 
@@ -177,6 +182,21 @@ class ResolveTimelineItemsListData(BaseModel):
     project: ResolveProjectStatus
     timeline: ResolveTimelineSummary
     tracks: list[ResolveTimelineTrackSummary] = Field(default_factory=list)
+
+
+class ResolveMarkerSummary(BaseModel):
+    frame: int
+    color: str
+    name: str
+    note: str | None = None
+    duration: int
+
+
+class ResolveMarkerAddData(BaseModel):
+    added: bool
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    marker: ResolveMarkerSummary
 
 
 class ResolveHealthData(BaseModel):

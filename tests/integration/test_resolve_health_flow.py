@@ -54,6 +54,7 @@ class FakeTimeline:
             "video": video_tracks or [],
             "audio": audio_tracks or [],
         }
+        self._markers: dict[int, dict[str, object]] = {}
 
     def GetName(self) -> str:
         return self._name
@@ -83,6 +84,27 @@ class FakeTimeline:
             )
             start_frame = end_frame
         return True
+
+    def AddMarker(
+        self,
+        frame: int,
+        color: str,
+        name: str,
+        note: str,
+        duration: int,
+        custom_data: str,
+    ) -> bool:
+        self._markers[int(frame)] = {
+            "color": color,
+            "name": name,
+            "note": note,
+            "duration": int(duration),
+            "custom_data": custom_data,
+        }
+        return True
+
+    def marker_at(self, frame: int) -> dict[str, object] | None:
+        return self._markers.get(frame)
 
 
 class FakeMediaPoolFolder:
@@ -116,6 +138,10 @@ class FakeMediaPool:
 
     def GetCurrentFolder(self) -> FakeMediaPoolFolder:
         return self._current_folder
+
+    def SetCurrentFolder(self, folder: FakeMediaPoolFolder) -> bool:
+        self._current_folder = folder
+        return True
 
     def CreateEmptyTimeline(self, name: str) -> FakeTimeline:
         timeline = FakeTimeline(name, video_tracks=[[]], audio_tracks=[])
@@ -519,6 +545,47 @@ def test_timeline_create_empty_requires_project(tmp_path: Path) -> None:
     assert result.error.category == "no_project_open"
 
 
+def test_timeline_set_current_switches_active_timeline(tmp_path: Path) -> None:
+    timeline_a = FakeTimeline("Assembly")
+    timeline_b = FakeTimeline("Review")
+    project = build_project(
+        timelines=[timeline_a, timeline_b],
+        current_timeline=timeline_a,
+    )
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_set_current",
+        "Review",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "project": {"open": True, "name": "Demo Project"},
+        "timeline": {"index": 2, "name": "Review"},
+    }
+    assert project.GetCurrentTimeline() is timeline_b
+
+
+def test_timeline_set_current_fails_for_missing_timeline(tmp_path: Path) -> None:
+    project = build_project(
+        timelines=[FakeTimeline("Assembly")],
+        current_timeline=FakeTimeline("Assembly"),
+    )
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_set_current",
+        "Missing",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "object_not_found"
+
+
 def test_media_pool_list_returns_folder_contents(tmp_path: Path) -> None:
     project = build_project(
         subfolder_names=["Day 1", "Day 2"],
@@ -559,6 +626,73 @@ def test_media_pool_list_filters_out_timeline_entries(tmp_path: Path) -> None:
     assert result.success is True
     assert result.data is not None
     assert result.data["clips"] == [{"name": "clip001.mov"}]
+
+
+def test_media_pool_folder_open_switches_into_child_folder(tmp_path: Path) -> None:
+    selects = FakeMediaPoolFolder(
+        "Selects",
+        subfolders=[FakeMediaPoolFolder("Closeups")],
+        clips=[FakeMediaPoolItem("clip010.mov")],
+    )
+    project = FakeProject(
+        "Demo Project",
+        media_pool_folder=FakeMediaPoolFolder(
+            "Master",
+            subfolders=[selects, FakeMediaPoolFolder("Day 2")],
+            clips=[FakeMediaPoolItem("clip001.mov")],
+        ),
+    )
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_pool_folder_open",
+        "Selects",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "folder": {"name": "Selects"},
+        "subfolders": [{"name": "Closeups"}],
+        "clips": [{"name": "clip010.mov"}],
+    }
+    assert project.GetMediaPool().GetCurrentFolder() is selects
+
+
+def test_media_pool_folder_open_fails_for_ambiguous_name(tmp_path: Path) -> None:
+    project = FakeProject(
+        "Demo Project",
+        media_pool_folder=FakeMediaPoolFolder(
+            "Master",
+            subfolders=[FakeMediaPoolFolder("Selects"), FakeMediaPoolFolder("Selects")],
+        ),
+    )
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_pool_folder_open",
+        "Selects",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
+def test_media_pool_folder_open_fails_for_missing_child_folder(tmp_path: Path) -> None:
+    project = build_project(subfolder_names=["Day 1"])
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_pool_folder_open",
+        "Missing",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "object_not_found"
 
 
 def test_media_import_imports_into_current_folder(tmp_path: Path) -> None:
@@ -744,6 +878,101 @@ def test_timeline_items_list_requires_current_timeline_when_not_specified(tmp_pa
         tmp_path,
         lambda: FakeResolve(project, ["Demo Project"]),
         "timeline_items_list",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "no_current_timeline"
+
+
+def test_marker_add_adds_marker_to_current_timeline(tmp_path: Path) -> None:
+    timeline = FakeTimeline("Assembly")
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "marker_add",
+        120,
+        "Cut point",
+        note="Review this join",
+        duration=12,
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "added": True,
+        "project": {"open": True, "name": "Demo Project"},
+        "timeline": {"index": 1, "name": "Assembly"},
+        "marker": {
+            "frame": 120,
+            "color": "Blue",
+            "name": "Cut point",
+            "note": "Review this join",
+            "duration": 12,
+        },
+    }
+    assert timeline.marker_at(120) == {
+        "color": "Blue",
+        "name": "Cut point",
+        "note": "Review this join",
+        "duration": 12,
+        "custom_data": "",
+    }
+
+
+def test_marker_add_uses_named_timeline_when_provided(tmp_path: Path) -> None:
+    active = FakeTimeline("Assembly")
+    review = FakeTimeline("Review")
+    project = build_project(
+        timelines=[active, review],
+        current_timeline=active,
+    )
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "marker_add",
+        48,
+        "Needs VO",
+        timeline_name="Review",
+        color="Green",
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert result.data["timeline"] == {"index": 2, "name": "Review"}
+    assert review.marker_at(48) is not None
+    assert active.marker_at(48) is None
+
+
+def test_marker_add_requires_positive_duration(tmp_path: Path) -> None:
+    timeline = FakeTimeline("Assembly")
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "marker_add",
+        10,
+        "Bad marker",
+        duration=0,
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
+def test_marker_add_requires_current_timeline_when_not_specified(tmp_path: Path) -> None:
+    project = build_project(timelines=[FakeTimeline("Assembly")], current_timeline=None)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "marker_add",
+        10,
+        "Review",
     )
 
     assert result.success is False

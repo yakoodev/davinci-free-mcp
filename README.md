@@ -101,6 +101,8 @@ The highest-risk part of the system is not the MCP server. It is the handshake b
   MVP tool catalog and deferrals.
 - `docs/DEVELOPMENT.md`
   Dev workflow, repo conventions, and anti-pattern guidance.
+- `docs/LIVE_BOOTSTRAP_AUTOMATION.md`
+  Exact working host-side automation flow for launching the embedded bootstrap in Resolve and validating MCP end-to-end.
 - `docs/README.ru.md`
   Short Russian overview and quick-start notes.
 - `docs/TROUBLESHOOTING.md`

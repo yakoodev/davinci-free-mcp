@@ -125,6 +125,12 @@ runtime/status/executor_status.json
 
 That status file now includes `instance_id` and lock metadata so duplicate writers are easier to spot.
 
+For the exact host-side automation flow that successfully launched
+`resolve_executor_bootstrap` inside the Resolve UI and then validated the public
+MCP endpoint, see:
+
+- `docs/LIVE_BOOTSTRAP_AUTOMATION.md`
+
 ## Recommended live retest flow after feature changes
 
 When you have changed backend code, bridge code, or `scripts/resolve_executor_bootstrap.py`, use this exact cycle:
@@ -361,6 +367,7 @@ Important:
 - bootstrap installation can be refreshed with `-ReinstallBootstrap`
 - if embedded scripts are disabled in Resolve, restart Resolve with `.\scripts\dev_start_resolve_with_python.ps1`
 - the most reliable proven path on this machine is still: start Resolve with Python in `PATH`, open the test project, then launch `resolve_executor_bootstrap` from the menu
+- if an agent keeps getting stuck between external scripting checks and embedded executor checks, follow `docs/LIVE_BOOTSTRAP_AUTOMATION.md` exactly
 
 For a smoke-style wrapper around the same flow:
 

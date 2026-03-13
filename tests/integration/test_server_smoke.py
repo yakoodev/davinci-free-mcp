@@ -22,8 +22,11 @@ def test_create_server_smoke() -> None:
         "timeline_list",
         "timeline_current",
         "timeline_create_empty",
+        "timeline_set_current",
         "media_pool_list",
+        "media_pool_folder_open",
         "media_import",
         "timeline_append_clips",
         "timeline_items_list",
+        "marker_add",
     } <= tool_names

@@ -185,6 +185,11 @@ The repository includes PowerShell helper scripts to keep the Windows host and D
 - `scripts/dev_agent_external_run.ps1`
   Agent-only fallback runner that uses external scripting access, opens a project by name, and then runs a host command.
 
+For the exact live workflow that successfully launched the embedded script from
+the Resolve UI and then validated MCP end-to-end, see:
+
+- `docs/LIVE_BOOTSTRAP_AUTOMATION.md`
+
 Recommended cycle:
 
 1. `.\scripts\dev_up.ps1`

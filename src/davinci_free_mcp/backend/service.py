@@ -15,6 +15,7 @@ from davinci_free_mcp.contracts import (
     ResolveHealthData,
     ResolveMediaImportData,
     ResolveMediaPoolListData,
+    ResolveMarkerAddData,
     ResolveProjectCurrentData,
     ResolveProjectListData,
     ResolveProjectOpenData,
@@ -23,6 +24,7 @@ from davinci_free_mcp.contracts import (
     ResolveTimelineCurrentData,
     ResolveTimelineItemsListData,
     ResolveTimelineListData,
+    ResolveTimelineSetCurrentData,
     ToolResultEnvelope,
 )
 
@@ -95,10 +97,34 @@ class ResolveBackendService:
             timeout_ms=timeout_ms,
         )
 
+    def timeline_set_current(
+        self,
+        name: str,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_set_current",
+            ResolveTimelineSetCurrentData,
+            payload={"name": name},
+            timeout_ms=timeout_ms,
+        )
+
     def media_pool_list(self, timeout_ms: int | None = None) -> ToolResultEnvelope:
         return self._invoke_command(
             "media_pool_list",
             ResolveMediaPoolListData,
+            timeout_ms=timeout_ms,
+        )
+
+    def media_pool_folder_open(
+        self,
+        name: str,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "media_pool_folder_open",
+            ResolveMediaPoolListData,
+            payload={"name": name},
             timeout_ms=timeout_ms,
         )
 
@@ -137,6 +163,30 @@ class ResolveBackendService:
             "timeline_items_list",
             ResolveTimelineItemsListData,
             target={"timeline": timeline_name} if timeline_name else {},
+            timeout_ms=timeout_ms,
+        )
+
+    def marker_add(
+        self,
+        frame: int,
+        name: str,
+        timeline_name: str | None = None,
+        note: str | None = None,
+        color: str | None = None,
+        duration: int = 1,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "marker_add",
+            ResolveMarkerAddData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={
+                "frame": frame,
+                "name": name,
+                "note": note,
+                "color": color,
+                "duration": duration,
+            },
             timeout_ms=timeout_ms,
         )
 

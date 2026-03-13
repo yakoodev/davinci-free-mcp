@@ -109,10 +109,26 @@ def create_server(
         )
 
     @server.tool()
+    def timeline_set_current(name: str, timeout_ms: int = 5000) -> dict[str, object]:
+        """Switch the current timeline in the open project."""
+
+        return backend_service.timeline_set_current(name, timeout_ms).model_dump(
+            mode="json"
+        )
+
+    @server.tool()
     def media_pool_list(timeout_ms: int = 5000) -> dict[str, object]:
         """List the current media pool folder contents."""
 
         return backend_service.media_pool_list(timeout_ms).model_dump(mode="json")
+
+    @server.tool()
+    def media_pool_folder_open(name: str, timeout_ms: int = 5000) -> dict[str, object]:
+        """Open a direct child media pool folder from the current folder context."""
+
+        return backend_service.media_pool_folder_open(name, timeout_ms).model_dump(
+            mode="json"
+        )
 
     @server.tool()
     def media_import(paths: list[str], timeout_ms: int = 5000) -> dict[str, object]:
@@ -143,6 +159,28 @@ def create_server(
 
         return backend_service.timeline_items_list(
             timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def marker_add(
+        frame: int,
+        name: str,
+        timeline_name: str | None = None,
+        note: str | None = None,
+        color: str | None = None,
+        duration: int = 1,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Add a timeline marker to the current or specified timeline."""
+
+        return backend_service.marker_add(
+            frame,
+            name,
+            timeline_name=timeline_name,
+            note=note,
+            color=color,
+            duration=duration,
             timeout_ms=timeout_ms,
         ).model_dump(mode="json")
 
