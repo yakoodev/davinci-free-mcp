@@ -17,6 +17,7 @@ from davinci_free_mcp.contracts import (
     ResolveMarkerListData,
     ResolveMediaClipInspectData,
     ResolveMediaImportData,
+    ResolveMediaPoolFolderStateData,
     ResolveMediaPoolListData,
     ResolveMarkerAddData,
     ResolveProjectCurrentData,
@@ -26,6 +27,7 @@ from davinci_free_mcp.contracts import (
     ResolveTimelineCreateEmptyData,
     ResolveTimelineCreateFromClipsData,
     ResolveTimelineCurrentData,
+    ResolveTimelineInspectData,
     ResolveTimelineItemsListData,
     ResolveTimelineListData,
     ResolveTimelineSetCurrentData,
@@ -151,6 +153,32 @@ class ResolveBackendService:
             timeout_ms=timeout_ms,
         )
 
+    def media_pool_folder_root(self, timeout_ms: int | None = None) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "media_pool_folder_root",
+            ResolveMediaPoolFolderStateData,
+            timeout_ms=timeout_ms,
+        )
+
+    def media_pool_folder_path(self, timeout_ms: int | None = None) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "media_pool_folder_path",
+            ResolveMediaPoolFolderStateData,
+            timeout_ms=timeout_ms,
+        )
+
+    def media_pool_folder_open_path(
+        self,
+        path: str,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "media_pool_folder_open_path",
+            ResolveMediaPoolFolderStateData,
+            payload={"path": path},
+            timeout_ms=timeout_ms,
+        )
+
     def media_import(
         self,
         paths: list[str],
@@ -198,6 +226,18 @@ class ResolveBackendService:
         return self._invoke_command(
             "timeline_items_list",
             ResolveTimelineItemsListData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_inspect(
+        self,
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_inspect",
+            ResolveTimelineInspectData,
             target={"timeline": timeline_name} if timeline_name else {},
             timeout_ms=timeout_ms,
         )

@@ -33,11 +33,15 @@ class ResolveCommandCore(object):
             "media_pool_folder_open": self._handle_media_pool_folder_open,
             "media_pool_folder_create": self._handle_media_pool_folder_create,
             "media_pool_folder_up": self._handle_media_pool_folder_up,
+            "media_pool_folder_root": self._handle_media_pool_folder_root,
+            "media_pool_folder_path": self._handle_media_pool_folder_path,
+            "media_pool_folder_open_path": self._handle_media_pool_folder_open_path,
             "media_clip_inspect": self._handle_media_clip_inspect,
             "media_import": self._handle_media_import,
             "timeline_append_clips": self._handle_timeline_append_clips,
             "timeline_create_from_clips": self._handle_timeline_create_from_clips,
             "timeline_items_list": self._handle_timeline_items_list,
+            "timeline_inspect": self._handle_timeline_inspect,
             "marker_add": self._handle_marker_add,
             "marker_list": self._handle_marker_list,
             "marker_delete": self._handle_marker_delete,
@@ -547,6 +551,121 @@ class ResolveCommandCore(object):
             data=self._media_pool_folder_listing(active_folder),
         )
 
+    def _handle_media_pool_folder_root(self, command, resolve):
+        current_project = self._current_project(resolve)
+        if current_project is None:
+            return self._failure(
+                command["request_id"],
+                "no_project_open",
+                "No current project is open in Resolve.",
+            )
+
+        media_pool = self._media_pool(current_project)
+        root_folder = self._safe_call(media_pool, "GetRootFolder") if media_pool is not None else None
+        if media_pool is None or root_folder is None:
+            return self._failure(
+                command["request_id"],
+                "object_not_found",
+                "Current media pool folder is not available.",
+            )
+
+        switched = bool(self._safe_call(media_pool, "SetCurrentFolder", root_folder))
+        active_folder = self._current_media_pool_folder(current_project)
+        active_name = self._safe_call(active_folder, "GetName")
+        root_name = self._safe_call(root_folder, "GetName")
+        if not switched or active_folder is None or active_name != root_name:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve did not switch to the root media pool folder.",
+            )
+
+        return self._success(
+            command["request_id"],
+            data=self._media_pool_folder_state(root_folder, root_folder),
+        )
+
+    def _handle_media_pool_folder_path(self, command, resolve):
+        current_project = self._current_project(resolve)
+        if current_project is None:
+            return self._failure(
+                command["request_id"],
+                "no_project_open",
+                "No current project is open in Resolve.",
+            )
+
+        media_pool = self._media_pool(current_project)
+        current_folder = self._current_media_pool_folder(current_project)
+        root_folder = self._safe_call(media_pool, "GetRootFolder") if media_pool is not None else None
+        if current_folder is None or root_folder is None:
+            return self._failure(
+                command["request_id"],
+                "object_not_found",
+                "Current media pool folder is not available.",
+            )
+
+        return self._success(
+            command["request_id"],
+            data=self._media_pool_folder_state(current_folder, root_folder),
+        )
+
+    def _handle_media_pool_folder_open_path(self, command, resolve):
+        current_project = self._current_project(resolve)
+        if current_project is None:
+            return self._failure(
+                command["request_id"],
+                "no_project_open",
+                "No current project is open in Resolve.",
+            )
+
+        path_value = str(command["payload"].get("path") or "").strip()
+        if not path_value:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Media pool folder path is required.",
+            )
+
+        media_pool = self._media_pool(current_project)
+        current_folder = self._current_media_pool_folder(current_project)
+        root_folder = self._safe_call(media_pool, "GetRootFolder") if media_pool is not None else None
+        if media_pool is None or current_folder is None or root_folder is None:
+            return self._failure(
+                command["request_id"],
+                "object_not_found",
+                "Current media pool folder is not available.",
+            )
+
+        target_folder, error = self._resolve_media_folder_by_path(
+            root_folder,
+            current_folder,
+            path_value,
+        )
+        if error is not None:
+            return self._failure(
+                command["request_id"],
+                error["category"],
+                error["message"],
+                details=error.get("details"),
+            )
+
+        switched = bool(self._safe_call(media_pool, "SetCurrentFolder", target_folder))
+        active_folder = self._current_media_pool_folder(current_project)
+        active_name = self._safe_call(active_folder, "GetName")
+        target_name = self._safe_call(target_folder, "GetName")
+        if not switched or active_folder is None or active_name != target_name:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve did not switch to media pool folder path '%s'." % path_value,
+                details={"path": path_value, "current_folder_name": active_name},
+            )
+
+        return self._success(
+            command["request_id"],
+            data=self._media_pool_folder_state(active_folder, root_folder),
+        )
+
     def _handle_media_clip_inspect(self, command, resolve):
         current_project = self._current_project(resolve)
         if current_project is None:
@@ -854,6 +973,53 @@ class ResolveCommandCore(object):
                 },
                 "timeline": self._timeline_summary(current_project, timeline),
                 "tracks": tracks,
+            },
+        )
+
+    def _handle_timeline_inspect(self, command, resolve):
+        current_project = self._current_project(resolve)
+        if current_project is None:
+            return self._failure(
+                command["request_id"],
+                "no_project_open",
+                "No current project is open in Resolve.",
+            )
+
+        timeline_name = command["target"].get("timeline")
+        if timeline_name:
+            timeline = self._resolve_timeline_by_name(current_project, str(timeline_name))
+        else:
+            timeline = self._safe_call(current_project, "GetCurrentTimeline")
+
+        if timeline is None:
+            if timeline_name:
+                return self._failure(
+                    command["request_id"],
+                    "object_not_found",
+                    "Timeline '%s' was not found." % timeline_name,
+                )
+            return self._failure(
+                command["request_id"],
+                "no_current_timeline",
+                "No current timeline is active in Resolve.",
+            )
+
+        video_track_count, video_item_count = self._timeline_track_counts(timeline, "video")
+        audio_track_count, audio_item_count = self._timeline_track_counts(timeline, "audio")
+
+        return self._success(
+            command["request_id"],
+            data={
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(current_project, "GetName"),
+                },
+                "timeline": self._timeline_summary(current_project, timeline),
+                "video_track_count": video_track_count,
+                "audio_track_count": audio_track_count,
+                "video_item_count": video_item_count,
+                "audio_item_count": audio_item_count,
+                "marker_count": len(self._timeline_markers(timeline)),
             },
         )
 
@@ -1203,6 +1369,83 @@ class ResolveCommandCore(object):
             ],
         }
 
+    def _media_pool_folder_state(self, folder, root_folder):
+        listing = self._media_pool_folder_listing(folder)
+        listing["path"] = self._media_pool_folder_path(root_folder, folder)
+        return listing
+
+    def _media_pool_folder_path(self, root_folder, target_folder):
+        if root_folder is None or target_folder is None:
+            return []
+        path_segments = self._find_media_folder_path(root_folder, target_folder)
+        return [
+            {"name": self._safe_call(folder, "GetName") or "Folder"}
+            for folder in path_segments
+        ]
+
+    def _find_media_folder_path(self, root_folder, target_folder):
+        if root_folder is None or target_folder is None:
+            return []
+        if root_folder is target_folder:
+            return [root_folder]
+        for child in self._list_media_subfolders(root_folder):
+            child_path = self._find_media_folder_path(child, target_folder)
+            if child_path:
+                return [root_folder] + child_path
+        target_name = self._safe_call(target_folder, "GetName")
+        if not target_name:
+            return []
+        name_path = self._find_media_folder_path_by_name(root_folder, str(target_name))
+        if len(name_path) == 1:
+            return name_path[0]
+        return []
+
+    def _find_media_folder_path_by_name(self, root_folder, target_name):
+        matches = []
+        if self._safe_call(root_folder, "GetName") == target_name:
+            matches.append([root_folder])
+        for child in self._list_media_subfolders(root_folder):
+            for child_path in self._find_media_folder_path_by_name(child, target_name):
+                matches.append([root_folder] + child_path)
+        return matches
+
+    def _resolve_media_folder_by_path(self, root_folder, current_folder, path_value):
+        normalized_path = str(path_value).replace("\\", "/")
+        is_absolute = normalized_path.startswith("/")
+        raw_segments = [segment.strip() for segment in normalized_path.split("/") if segment.strip()]
+        if not raw_segments and not is_absolute:
+            return None, {
+                "category": "validation_error",
+                "message": "Media pool folder path is required.",
+                "details": {"path": path_value},
+            }
+
+        target_folder = root_folder if is_absolute else current_folder
+        if raw_segments:
+            root_name = self._safe_call(root_folder, "GetName")
+            if is_absolute and root_name and raw_segments[0] == str(root_name):
+                raw_segments = raw_segments[1:]
+
+        for segment in raw_segments:
+            if segment == ".":
+                continue
+            if segment == "..":
+                parent = self._find_parent_media_folder(root_folder, target_folder)
+                if parent is None:
+                    return None, {
+                        "category": "validation_error",
+                        "message": "Path '%s' moves above the root media pool folder." % path_value,
+                        "details": {"path": path_value},
+                    }
+                target_folder = parent
+                continue
+            target_folder, error = self._resolve_media_subfolder_by_name(target_folder, segment)
+            if error is not None:
+                error = dict(error)
+                error["details"] = dict(error.get("details") or {}, path=path_value, segment=segment)
+                return None, error
+        return target_folder, None
+
     def _resolve_media_subfolder_by_name(self, folder, folder_name):
         matches = [
             child
@@ -1326,6 +1569,15 @@ class ResolveCommandCore(object):
             return int(value) if value is not None else None
         except (TypeError, ValueError):
             return None
+
+    def _timeline_track_counts(self, timeline, track_type):
+        track_count = self._safe_call(timeline, "GetTrackCount", track_type) or 0
+        item_count = 0
+        for track_index in range(1, int(track_count) + 1):
+            items = self._safe_call(timeline, "GetItemListInTrack", track_type, track_index)
+            if isinstance(items, list):
+                item_count += len(items)
+        return int(track_count), item_count
 
     def _timeline_markers(self, timeline):
         markers_by_frame = self._timeline_markers_by_frame(timeline)

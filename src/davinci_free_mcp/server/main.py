@@ -145,6 +145,26 @@ def create_server(
         return backend_service.media_pool_folder_up(timeout_ms).model_dump(mode="json")
 
     @server.tool()
+    def media_pool_folder_root(timeout_ms: int = 5000) -> dict[str, object]:
+        """Switch the current media pool folder context to the root folder."""
+
+        return backend_service.media_pool_folder_root(timeout_ms).model_dump(mode="json")
+
+    @server.tool()
+    def media_pool_folder_path(timeout_ms: int = 5000) -> dict[str, object]:
+        """Return the current media pool folder, listing, and breadcrumb path."""
+
+        return backend_service.media_pool_folder_path(timeout_ms).model_dump(mode="json")
+
+    @server.tool()
+    def media_pool_folder_open_path(path: str, timeout_ms: int = 5000) -> dict[str, object]:
+        """Open a media pool folder by relative or absolute path."""
+
+        return backend_service.media_pool_folder_open_path(path, timeout_ms).model_dump(
+            mode="json"
+        )
+
+    @server.tool()
     def media_import(paths: list[str], timeout_ms: int = 5000) -> dict[str, object]:
         """Import files or folders into the current media pool folder."""
 
@@ -186,6 +206,18 @@ def create_server(
         """Return grouped timeline items for the target or current timeline."""
 
         return backend_service.timeline_items_list(
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def timeline_inspect(
+        timeline_name: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Return summary counts for the target or current timeline."""
+
+        return backend_service.timeline_inspect(
             timeline_name=timeline_name,
             timeout_ms=timeout_ms,
         ).model_dump(mode="json")

@@ -158,6 +158,13 @@ class ResolveMediaPoolListData(BaseModel):
     clips: list[ResolveMediaClipSummary] = Field(default_factory=list)
 
 
+class ResolveMediaPoolFolderStateData(BaseModel):
+    folder: ResolveMediaPoolFolderSummary
+    path: list[ResolveMediaPoolFolderSummary] = Field(default_factory=list)
+    subfolders: list[ResolveMediaPoolSubfolderSummary] = Field(default_factory=list)
+    clips: list[ResolveMediaClipSummary] = Field(default_factory=list)
+
+
 class ResolveMediaImportData(BaseModel):
     imported_count: int
     items: list[ResolveMediaClipSummary] = Field(default_factory=list)
@@ -194,6 +201,16 @@ class ResolveTimelineItemsListData(BaseModel):
     project: ResolveProjectStatus
     timeline: ResolveTimelineSummary
     tracks: list[ResolveTimelineTrackSummary] = Field(default_factory=list)
+
+
+class ResolveTimelineInspectData(BaseModel):
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    video_track_count: int
+    audio_track_count: int
+    video_item_count: int
+    audio_item_count: int
+    marker_count: int
 
 
 class ResolveMarkerSummary(BaseModel):

@@ -1214,6 +1214,109 @@ def test_media_pool_folder_up_returns_validation_error_on_root(tmp_path: Path) -
     assert result.error.category == "validation_error"
 
 
+def test_media_pool_folder_root_switches_to_root_folder(tmp_path: Path) -> None:
+    child = FakeMediaPoolFolder("Selects", clips=[FakeMediaPoolItem("clip001.mov")])
+    root = FakeMediaPoolFolder("Master", subfolders=[child], clips=[FakeMediaPoolItem("root.mov")])
+    project = build_project(media_pool_folder=child)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_pool_folder_root",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "folder": {"name": "Master"},
+        "path": [{"name": "Master"}],
+        "subfolders": [{"name": "Selects"}],
+        "clips": [{"name": "root.mov"}],
+    }
+    assert project.GetMediaPool().GetCurrentFolder() is root
+
+
+def test_media_pool_folder_path_returns_breadcrumb_for_current_folder(tmp_path: Path) -> None:
+    closeups = FakeMediaPoolFolder("Closeups", clips=[FakeMediaPoolItem("clip001.mov")])
+    selects = FakeMediaPoolFolder("Selects", subfolders=[closeups])
+    FakeMediaPoolFolder("Master", subfolders=[selects])
+    project = build_project(media_pool_folder=closeups)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_pool_folder_path",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "folder": {"name": "Closeups"},
+        "path": [{"name": "Master"}, {"name": "Selects"}, {"name": "Closeups"}],
+        "subfolders": [],
+        "clips": [{"name": "clip001.mov"}],
+    }
+
+
+def test_media_pool_folder_open_path_supports_relative_navigation(tmp_path: Path) -> None:
+    closeups = FakeMediaPoolFolder("Closeups")
+    selects = FakeMediaPoolFolder("Selects", subfolders=[closeups])
+    root = FakeMediaPoolFolder("Master", subfolders=[selects, FakeMediaPoolFolder("Day 2")])
+    project = build_project(media_pool_folder=root)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_pool_folder_open_path",
+        "Selects/Closeups",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "folder": {"name": "Closeups"},
+        "path": [{"name": "Master"}, {"name": "Selects"}, {"name": "Closeups"}],
+        "subfolders": [],
+        "clips": [],
+    }
+    assert project.GetMediaPool().GetCurrentFolder() is closeups
+
+
+def test_media_pool_folder_open_path_supports_absolute_and_parent_segments(tmp_path: Path) -> None:
+    closeups = FakeMediaPoolFolder("Closeups")
+    selects = FakeMediaPoolFolder("Selects", subfolders=[closeups])
+    FakeMediaPoolFolder("Master", subfolders=[selects, FakeMediaPoolFolder("Day 2")])
+    project = build_project(media_pool_folder=closeups)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_pool_folder_open_path",
+        "/Master/Selects/../Day 2",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "folder": {"name": "Day 2"},
+        "path": [{"name": "Master"}, {"name": "Day 2"}],
+        "subfolders": [],
+        "clips": [],
+    }
+    assert project.GetMediaPool().GetCurrentFolder().GetName() == "Day 2"
+
+
+def test_media_pool_folder_open_path_rejects_navigation_above_root(tmp_path: Path) -> None:
+    project = build_project()
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_pool_folder_open_path",
+        "../../Outside",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
 def test_media_clip_inspect_returns_properties_from_current_folder(tmp_path: Path) -> None:
     clip = FakeMediaPoolItem(
         "clip001.mov",
@@ -1344,3 +1447,66 @@ def test_timeline_create_from_clips_fails_for_ambiguous_clip(tmp_path: Path) -> 
     assert result.success is False
     assert result.error is not None
     assert result.error.category == "validation_error"
+
+
+def test_timeline_inspect_returns_track_and_marker_counts(tmp_path: Path) -> None:
+    timeline = FakeTimeline(
+        "Assembly",
+        video_tracks=[
+            [FakeTimelineItem("clip001.mov", 0, 100), FakeTimelineItem("clip002.mov", 100, 200)],
+            [FakeTimelineItem("clip003.mov", 0, 120)],
+        ],
+        audio_tracks=[[FakeTimelineItem("audio001.wav", 0, 200)]],
+    )
+    timeline.AddMarker(24, "Blue", "A", "", 1, "")
+    timeline.AddMarker(48, "Green", "B", "", 2, "")
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_inspect",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "project": {"open": True, "name": "Demo Project"},
+        "timeline": {"index": 1, "name": "Assembly"},
+        "video_track_count": 2,
+        "audio_track_count": 1,
+        "video_item_count": 3,
+        "audio_item_count": 1,
+        "marker_count": 2,
+    }
+
+
+def test_timeline_inspect_resolves_explicit_timeline_name(tmp_path: Path) -> None:
+    active = FakeTimeline("Assembly")
+    review = FakeTimeline("Review", video_tracks=[[FakeTimelineItem("clip001.mov", 0, 100)]])
+    project = build_project(timelines=[active, review], current_timeline=active)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_inspect",
+        timeline_name="Review",
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert result.data["timeline"] == {"index": 2, "name": "Review"}
+    assert result.data["video_item_count"] == 1
+
+
+def test_timeline_inspect_requires_current_timeline_when_not_specified(tmp_path: Path) -> None:
+    project = build_project(timelines=[FakeTimeline("Assembly")], current_timeline=None)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_inspect",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "no_current_timeline"
