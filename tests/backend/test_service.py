@@ -180,3 +180,51 @@ def test_marker_inspect_normalizes_invalid_executor_payload() -> None:
     assert result.success is False
     assert result.error is not None
     assert result.error.category == "execution_failure"
+
+
+def test_timeline_track_inspect_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "track_type": "video",
+                    "track_index": 1,
+                    "item_count": "bad",
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.timeline_track_inspect("video", 1)
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
+def test_marker_list_range_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "frame_from": 10,
+                    "frame_to": 20,
+                    "markers": [{"frame": "bad"}],
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.marker_list_range(10, 20)
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"

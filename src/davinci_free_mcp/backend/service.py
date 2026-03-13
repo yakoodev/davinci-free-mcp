@@ -16,9 +16,11 @@ from davinci_free_mcp.contracts import (
     ResolveMarkerDeleteData,
     ResolveMarkerInspectData,
     ResolveMarkerListData,
+    ResolveMarkerRangeListData,
     ResolveMediaClipInspectData,
     ResolveMediaClipInspectPathData,
     ResolveMediaImportData,
+    ResolveMediaPoolFolderRecursiveData,
     ResolveMediaPoolFolderStateData,
     ResolveMediaPoolListData,
     ResolveMarkerAddData,
@@ -31,6 +33,7 @@ from davinci_free_mcp.contracts import (
     ResolveTimelineCurrentData,
     ResolveTimelineInspectData,
     ResolveTimelineItemsListData,
+    ResolveTimelineTrackInspectData,
     ResolveTimelineTrackItemsData,
     ResolveTimelineListData,
     ResolveTimelineSetCurrentData,
@@ -170,6 +173,21 @@ class ResolveBackendService:
             timeout_ms=timeout_ms,
         )
 
+    def media_pool_folder_list_recursive(
+        self,
+        max_depth: int | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        payload = {}
+        if max_depth is not None:
+            payload["max_depth"] = max_depth
+        return self._invoke_command(
+            "media_pool_folder_list_recursive",
+            ResolveMediaPoolFolderRecursiveData,
+            payload=payload,
+            timeout_ms=timeout_ms,
+        )
+
     def media_pool_folder_open_path(
         self,
         path: str,
@@ -248,6 +266,21 @@ class ResolveBackendService:
             timeout_ms=timeout_ms,
         )
 
+    def timeline_track_inspect(
+        self,
+        track_type: str,
+        track_index: int,
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_track_inspect",
+            ResolveTimelineTrackInspectData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={"track_type": track_type, "track_index": track_index},
+            timeout_ms=timeout_ms,
+        )
+
     def timeline_inspect(
         self,
         timeline_name: str | None = None,
@@ -307,6 +340,26 @@ class ResolveBackendService:
             ResolveMarkerInspectData,
             target={"timeline": timeline_name} if timeline_name else {},
             payload={"frame": frame},
+            timeout_ms=timeout_ms,
+        )
+
+    def marker_list_range(
+        self,
+        frame_from: int | None = None,
+        frame_to: int | None = None,
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        payload = {}
+        if frame_from is not None:
+            payload["frame_from"] = frame_from
+        if frame_to is not None:
+            payload["frame_to"] = frame_to
+        return self._invoke_command(
+            "marker_list_range",
+            ResolveMarkerRangeListData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload=payload,
             timeout_ms=timeout_ms,
         )
 

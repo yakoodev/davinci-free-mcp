@@ -157,6 +157,18 @@ def create_server(
         return backend_service.media_pool_folder_path(timeout_ms).model_dump(mode="json")
 
     @server.tool()
+    def media_pool_folder_list_recursive(
+        max_depth: int | None = None,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Return the current media pool folder tree recursively."""
+
+        return backend_service.media_pool_folder_list_recursive(
+            max_depth=max_depth,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
     def media_pool_folder_open_path(path: str, timeout_ms: int = 5000) -> dict[str, object]:
         """Open a media pool folder by relative or absolute path."""
 
@@ -247,6 +259,22 @@ def create_server(
         ).model_dump(mode="json")
 
     @server.tool()
+    def timeline_track_inspect(
+        track_type: str,
+        track_index: int,
+        timeline_name: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Return summary counts and bounds for one track on the target or current timeline."""
+
+        return backend_service.timeline_track_inspect(
+            track_type,
+            track_index,
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
     def marker_add(
         frame: int,
         name: str,
@@ -290,6 +318,22 @@ def create_server(
 
         return backend_service.marker_inspect(
             frame,
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def marker_list_range(
+        frame_from: int | None = None,
+        frame_to: int | None = None,
+        timeline_name: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """List markers filtered to a frame range on the current or specified timeline."""
+
+        return backend_service.marker_list_range(
+            frame_from=frame_from,
+            frame_to=frame_to,
             timeline_name=timeline_name,
             timeout_ms=timeout_ms,
         ).model_dump(mode="json")

@@ -2,9 +2,12 @@ from davinci_free_mcp.contracts import (
     BridgeCommand,
     BridgeResult,
     ResolveMarkerInspectData,
+    ResolveMarkerRangeListData,
     ResolveMediaClipInspectPathData,
+    ResolveMediaPoolFolderRecursiveData,
     ResolveMediaPoolFolderStateData,
     ResolveTimelineInspectData,
+    ResolveTimelineTrackInspectData,
     ResolveTimelineTrackItemsData,
 )
 
@@ -124,3 +127,59 @@ def test_media_clip_inspect_path_data_round_trip() -> None:
 
     assert restored.path[-1].name == "Closeups"
     assert restored.clip.properties["File Path"] == "C:/media/clip001.mov"
+
+
+def test_media_pool_folder_recursive_data_round_trip() -> None:
+    payload = ResolveMediaPoolFolderRecursiveData.model_validate(
+        {
+            "folder": {"name": "Master"},
+            "path": [{"name": "Master"}],
+            "max_depth": 2,
+            "tree": {
+                "name": "Master",
+                "clips": [{"name": "root.mov"}],
+                "subfolders": [{"name": "Selects", "clips": [], "subfolders": []}],
+            },
+        }
+    )
+
+    restored = ResolveMediaPoolFolderRecursiveData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.tree.subfolders[0].name == "Selects"
+    assert restored.max_depth == 2
+
+
+def test_timeline_track_inspect_data_round_trip() -> None:
+    payload = ResolveTimelineTrackInspectData.model_validate(
+        {
+            "project": {"open": True, "name": "Demo Project"},
+            "timeline": {"index": 1, "name": "Assembly"},
+            "track_type": "video",
+            "track_index": 1,
+            "item_count": 2,
+            "start_frame": 0,
+            "end_frame": 200,
+        }
+    )
+
+    restored = ResolveTimelineTrackInspectData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.item_count == 2
+    assert restored.end_frame == 200
+
+
+def test_marker_range_list_data_round_trip() -> None:
+    payload = ResolveMarkerRangeListData.model_validate(
+        {
+            "project": {"open": True, "name": "Demo Project"},
+            "timeline": {"index": 1, "name": "Assembly"},
+            "frame_from": 10,
+            "frame_to": 20,
+            "markers": [{"frame": 12, "name": "A"}],
+        }
+    )
+
+    restored = ResolveMarkerRangeListData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.frame_from == 10
+    assert restored.markers[0].frame == 12

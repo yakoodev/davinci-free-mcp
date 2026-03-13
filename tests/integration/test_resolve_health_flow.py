@@ -990,6 +990,53 @@ def test_timeline_track_items_list_returns_not_found_for_missing_track(tmp_path:
     assert result.error.category == "object_not_found"
 
 
+def test_timeline_track_inspect_returns_bounds_and_count(tmp_path: Path) -> None:
+    timeline = FakeTimeline(
+        "Assembly",
+        video_tracks=[
+            [],
+            [FakeTimelineItem("clip002.mov", 100, 200), FakeTimelineItem("clip003.mov", 220, 340)],
+        ],
+    )
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_track_inspect",
+        "video",
+        2,
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "project": {"open": True, "name": "Demo Project"},
+        "timeline": {"index": 1, "name": "Assembly"},
+        "track_type": "video",
+        "track_index": 2,
+        "item_count": 2,
+        "start_frame": 100,
+        "end_frame": 340,
+    }
+
+
+def test_timeline_track_inspect_returns_not_found_for_missing_track(tmp_path: Path) -> None:
+    timeline = FakeTimeline("Assembly", video_tracks=[[FakeTimelineItem("clip001.mov", 0, 100)]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_track_inspect",
+        "audio",
+        1,
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "object_not_found"
+
+
 def test_marker_add_adds_marker_to_current_timeline(tmp_path: Path) -> None:
     timeline = FakeTimeline("Assembly")
     project = build_project(timelines=[timeline], current_timeline=timeline)
@@ -1199,6 +1246,57 @@ def test_marker_inspect_returns_not_found_for_missing_frame(tmp_path: Path) -> N
     assert result.error.category == "object_not_found"
 
 
+def test_marker_list_range_filters_markers_by_frame_bounds(tmp_path: Path) -> None:
+    timeline = FakeTimeline("Assembly")
+    timeline.AddMarker(10, "Blue", "A", "", 1, "")
+    timeline.AddMarker(20, "Blue", "B", "", 1, "")
+    timeline.AddMarker(30, "Blue", "C", "", 1, "")
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "marker_list_range",
+        15,
+        25,
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "project": {"open": True, "name": "Demo Project"},
+        "timeline": {"index": 1, "name": "Assembly"},
+        "frame_from": 15,
+        "frame_to": 25,
+        "markers": [
+            {
+                "frame": 20,
+                "color": "Blue",
+                "name": "B",
+                "note": "",
+                "duration": 1,
+                "custom_data": "",
+            }
+        ],
+    }
+
+
+def test_marker_list_range_rejects_inverted_bounds(tmp_path: Path) -> None:
+    timeline = FakeTimeline("Assembly")
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "marker_list_range",
+        30,
+        10,
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
 def test_marker_delete_removes_marker_from_current_timeline(tmp_path: Path) -> None:
     timeline = FakeTimeline("Assembly")
     timeline.AddMarker(24, "Blue", "Review", "", 1, "")
@@ -1365,6 +1463,66 @@ def test_media_pool_folder_path_returns_breadcrumb_for_current_folder(tmp_path: 
         "subfolders": [],
         "clips": [{"name": "clip001.mov"}],
     }
+
+
+def test_media_pool_folder_list_recursive_returns_tree(tmp_path: Path) -> None:
+    closeups = FakeMediaPoolFolder("Closeups", clips=[FakeMediaPoolItem("clip001.mov")])
+    selects = FakeMediaPoolFolder(
+        "Selects",
+        subfolders=[closeups],
+        clips=[FakeMediaPoolItem("select.mov")],
+    )
+    root = FakeMediaPoolFolder("Master", subfolders=[selects], clips=[FakeMediaPoolItem("root.mov")])
+    project = build_project(media_pool_folder=root)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_pool_folder_list_recursive",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "folder": {"name": "Master"},
+        "path": [{"name": "Master"}],
+        "max_depth": None,
+        "tree": {
+            "name": "Master",
+            "clips": [{"name": "root.mov"}],
+            "subfolders": [
+                {
+                    "name": "Selects",
+                    "clips": [{"name": "select.mov"}],
+                    "subfolders": [
+                        {
+                            "name": "Closeups",
+                            "clips": [{"name": "clip001.mov"}],
+                            "subfolders": [],
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+
+
+def test_media_pool_folder_list_recursive_respects_max_depth(tmp_path: Path) -> None:
+    closeups = FakeMediaPoolFolder("Closeups", clips=[FakeMediaPoolItem("clip001.mov")])
+    selects = FakeMediaPoolFolder("Selects", subfolders=[closeups])
+    root = FakeMediaPoolFolder("Master", subfolders=[selects])
+    project = build_project(media_pool_folder=root)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "media_pool_folder_list_recursive",
+        1,
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert result.data["max_depth"] == 1
+    assert result.data["tree"]["subfolders"][0]["subfolders"] == []
 
 
 def test_media_pool_folder_open_path_supports_relative_navigation(tmp_path: Path) -> None:

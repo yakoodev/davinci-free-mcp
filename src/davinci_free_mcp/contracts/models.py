@@ -165,6 +165,19 @@ class ResolveMediaPoolFolderStateData(BaseModel):
     clips: list[ResolveMediaClipSummary] = Field(default_factory=list)
 
 
+class ResolveMediaPoolFolderNode(BaseModel):
+    name: str
+    clips: list[ResolveMediaClipSummary] = Field(default_factory=list)
+    subfolders: list["ResolveMediaPoolFolderNode"] = Field(default_factory=list)
+
+
+class ResolveMediaPoolFolderRecursiveData(BaseModel):
+    folder: ResolveMediaPoolFolderSummary
+    path: list[ResolveMediaPoolFolderSummary] = Field(default_factory=list)
+    max_depth: int | None = None
+    tree: ResolveMediaPoolFolderNode
+
+
 class ResolveMediaImportData(BaseModel):
     imported_count: int
     items: list[ResolveMediaClipSummary] = Field(default_factory=list)
@@ -209,6 +222,16 @@ class ResolveTimelineTrackItemsData(BaseModel):
     track: ResolveTimelineTrackSummary
 
 
+class ResolveTimelineTrackInspectData(BaseModel):
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    track_type: str
+    track_index: int
+    item_count: int
+    start_frame: int | None = None
+    end_frame: int | None = None
+
+
 class ResolveTimelineInspectData(BaseModel):
     project: ResolveProjectStatus
     timeline: ResolveTimelineSummary
@@ -245,6 +268,14 @@ class ResolveMarkerInspectData(BaseModel):
     project: ResolveProjectStatus
     timeline: ResolveTimelineSummary
     marker: ResolveMarkerSummary
+
+
+class ResolveMarkerRangeListData(BaseModel):
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    frame_from: int | None = None
+    frame_to: int | None = None
+    markers: list[ResolveMarkerSummary] = Field(default_factory=list)
 
 
 class ResolveMarkerDeleteMarkerData(BaseModel):
