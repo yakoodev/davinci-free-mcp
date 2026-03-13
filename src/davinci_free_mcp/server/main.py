@@ -81,6 +81,41 @@ def create_server(
         return backend_service.project_list(timeout_ms).model_dump(mode="json")
 
     @server.tool()
+    def project_manager_folder_list(timeout_ms: int = 5000) -> dict[str, object]:
+        """Return the current project-manager folder and its direct child folders/projects."""
+
+        return backend_service.project_manager_folder_list(timeout_ms).model_dump(
+            mode="json"
+        )
+
+    @server.tool()
+    def project_manager_folder_open(
+        name: str,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Open a direct child folder in the current project-manager context."""
+
+        return backend_service.project_manager_folder_open(name, timeout_ms).model_dump(
+            mode="json"
+        )
+
+    @server.tool()
+    def project_manager_folder_up(timeout_ms: int = 5000) -> dict[str, object]:
+        """Move the project-manager context to the parent folder."""
+
+        return backend_service.project_manager_folder_up(timeout_ms).model_dump(
+            mode="json"
+        )
+
+    @server.tool()
+    def project_manager_folder_path(timeout_ms: int = 5000) -> dict[str, object]:
+        """Return the current project-manager folder with breadcrumb path."""
+
+        return backend_service.project_manager_folder_path(timeout_ms).model_dump(
+            mode="json"
+        )
+
+    @server.tool()
     def project_open(project_name: str, timeout_ms: int = 5000) -> dict[str, object]:
         """Open a project by name in the current Resolve database context."""
 

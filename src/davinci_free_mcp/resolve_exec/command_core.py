@@ -24,6 +24,10 @@ class ResolveCommandCore(object):
             "resolve_health": self._handle_resolve_health,
             "project_current": self._handle_project_current,
             "project_list": self._handle_project_list,
+            "project_manager_folder_list": self._handle_project_manager_folder_list,
+            "project_manager_folder_open": self._handle_project_manager_folder_open,
+            "project_manager_folder_up": self._handle_project_manager_folder_up,
+            "project_manager_folder_path": self._handle_project_manager_folder_path,
             "project_open": self._handle_project_open,
             "timeline_list": self._handle_timeline_list,
             "timeline_current": self._handle_timeline_current,
@@ -189,6 +193,112 @@ class ResolveCommandCore(object):
         return self._success(
             command["request_id"],
             data={"projects": [{"name": name} for name in project_names]},
+        )
+
+    def _handle_project_manager_folder_list(self, command, resolve):
+        project_manager = self._safe_call(resolve, "GetProjectManager")
+        if project_manager is None:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve project manager is not available.",
+            )
+
+        return self._success(
+            command["request_id"],
+            data=self._project_manager_folder_listing(project_manager),
+        )
+
+    def _handle_project_manager_folder_open(self, command, resolve):
+        folder_name = str(command["payload"].get("name") or "").strip()
+        if not folder_name:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Project manager folder name is required.",
+            )
+
+        project_manager = self._safe_call(resolve, "GetProjectManager")
+        if project_manager is None:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve project manager is not available.",
+            )
+
+        folder_names = self._list_project_manager_folder_names(project_manager)
+        if folder_name not in folder_names:
+            return self._failure(
+                command["request_id"],
+                "object_not_found",
+                "Project manager folder '%s' was not found in the current folder."
+                % folder_name,
+                details={"folder_name": folder_name},
+            )
+
+        opened = bool(self._safe_call(project_manager, "OpenFolder", folder_name))
+        current_name = self._project_manager_current_folder_name(project_manager)
+        if not opened or current_name != folder_name:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve did not switch to project manager folder '%s'." % folder_name,
+                details={"folder_name": folder_name, "current_folder_name": current_name},
+            )
+
+        return self._success(
+            command["request_id"],
+            data=self._project_manager_folder_state(project_manager),
+        )
+
+    def _handle_project_manager_folder_up(self, command, resolve):
+        project_manager = self._safe_call(resolve, "GetProjectManager")
+        if project_manager is None:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve project manager is not available.",
+            )
+
+        current_path = self._project_manager_folder_path(project_manager)
+        if len(current_path) <= 1:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Current project manager folder is already the root folder.",
+            )
+
+        parent_path = current_path[:-1]
+        moved = bool(self._safe_call(project_manager, "GotoParentFolder"))
+        if not moved:
+            moved = self._project_manager_open_path_from_root(project_manager, parent_path)
+        current_name = self._project_manager_current_folder_name(project_manager)
+        expected_name = parent_path[-1]
+        if not moved or current_name != expected_name:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve did not switch to the parent project manager folder.",
+                details={"current_folder_name": current_name, "expected_folder_name": expected_name},
+            )
+
+        return self._success(
+            command["request_id"],
+            data=self._project_manager_folder_state(project_manager),
+        )
+
+    def _handle_project_manager_folder_path(self, command, resolve):
+        project_manager = self._safe_call(resolve, "GetProjectManager")
+        if project_manager is None:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve project manager is not available.",
+            )
+
+        return self._success(
+            command["request_id"],
+            data=self._project_manager_folder_state(project_manager),
         )
 
     def _handle_project_open(self, command, resolve):
@@ -1928,6 +2038,139 @@ class ResolveCommandCore(object):
         if isinstance(names, list):
             return [str(name) for name in names]
         return []
+
+    def _project_manager_current_folder_name(self, project_manager):
+        current_folder = self._safe_call(project_manager, "GetCurrentFolder")
+        if isinstance(current_folder, str):
+            current_folder = current_folder.strip()
+            return current_folder or None
+        name = self._safe_call(current_folder, "GetName")
+        if name is not None:
+            name = str(name).strip()
+            return name or None
+        return None
+
+    def _project_manager_folder_display_name(self, folder_name):
+        if folder_name:
+            return folder_name
+        return "Root"
+
+    def _list_project_manager_folder_names(self, project_manager):
+        if project_manager is None:
+            return []
+
+        folder_names = self._safe_call(project_manager, "GetFolderListInCurrentFolder")
+        if isinstance(folder_names, list):
+            return [str(name) for name in folder_names]
+
+        folder_names = self._safe_call(project_manager, "GetFoldersInCurrentFolder")
+        if isinstance(folder_names, list):
+            return [str(name) for name in folder_names]
+        if isinstance(folder_names, dict):
+            return [str(name) for name in folder_names.values()]
+        return []
+
+    def _project_manager_folder_listing(self, project_manager):
+        current_name = self._project_manager_current_folder_name(project_manager)
+        return {
+            "folder": {"name": self._project_manager_folder_display_name(current_name)},
+            "subfolders": [
+                {"name": folder_name}
+                for folder_name in self._list_project_manager_folder_names(project_manager)
+            ],
+            "projects": [
+                {"name": project_name}
+                for project_name in self._list_project_names(project_manager)
+            ],
+        }
+
+    def _project_manager_folder_state(self, project_manager):
+        listing = self._project_manager_folder_listing(project_manager)
+        listing["path"] = [
+            {"name": self._project_manager_folder_display_name(folder_name)}
+            for folder_name in self._project_manager_folder_path(project_manager)
+        ]
+        return listing
+
+    def _project_manager_folder_signature(self, project_manager):
+        folder_names = self._list_project_manager_folder_names(project_manager)
+        project_names = self._list_project_names(project_manager)
+        return (
+            self._project_manager_current_folder_name(project_manager),
+            tuple(folder_names),
+            tuple(project_names),
+        )
+
+    def _project_manager_folder_path(self, project_manager):
+        current_name = self._project_manager_current_folder_name(project_manager)
+        if current_name is None:
+            if self._project_manager_goto_root(project_manager):
+                return [self._project_manager_current_folder_name(project_manager)]
+            return [None]
+
+        original_signature = self._project_manager_folder_signature(project_manager)
+        if not self._project_manager_goto_root(project_manager):
+            return [current_name]
+
+        found_path = self._project_manager_find_folder_path(project_manager, original_signature, [])
+        if found_path is None:
+            found_path = [self._project_manager_current_folder_name(project_manager) or current_name]
+
+        self._project_manager_open_path_from_root(project_manager, found_path)
+        return found_path
+
+    def _project_manager_find_folder_path(self, project_manager, target_signature, parent_names):
+        current_name = self._project_manager_current_folder_name(project_manager)
+        if current_name is None:
+            return None
+
+        current_path = list(parent_names) + [current_name]
+        if self._project_manager_folder_signature(project_manager) == target_signature:
+            return current_path
+
+        for folder_name in self._list_project_manager_folder_names(project_manager):
+            if not self._safe_call(project_manager, "OpenFolder", folder_name):
+                continue
+
+            found_path = self._project_manager_find_folder_path(
+                project_manager,
+                target_signature,
+                current_path,
+            )
+            if found_path is not None:
+                return found_path
+
+            if not self._project_manager_backtrack_to_path(project_manager, current_path):
+                return None
+
+        return None
+
+    def _project_manager_backtrack_to_path(self, project_manager, path_names):
+        moved = self._safe_call(project_manager, "GotoParentFolder")
+        if moved:
+            return True
+        return self._project_manager_open_path_from_root(project_manager, path_names)
+
+    def _project_manager_goto_root(self, project_manager):
+        result = self._safe_call(project_manager, "GotoRootFolder")
+        return bool(result)
+
+    def _project_manager_open_path_from_root(self, project_manager, path_names):
+        if not path_names:
+            return self._project_manager_goto_root(project_manager)
+
+        if not self._project_manager_goto_root(project_manager):
+            return False
+
+        current_name = self._project_manager_current_folder_name(project_manager)
+        segments = list(path_names)
+        if current_name is not None and segments and segments[0] == current_name:
+            segments = segments[1:]
+
+        for segment in segments:
+            if not self._safe_call(project_manager, "OpenFolder", segment):
+                return False
+        return True
 
     def _timeline_summary(self, project, timeline):
         return {

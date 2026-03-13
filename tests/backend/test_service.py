@@ -160,6 +160,29 @@ def test_timeline_track_items_list_normalizes_invalid_executor_payload() -> None
     assert result.error.category == "execution_failure"
 
 
+def test_project_manager_folder_path_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "folder": {"name": "Clients"},
+                    "path": [{"name": "Root"}, {"name": 123}],
+                    "subfolders": [],
+                    "projects": [],
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.project_manager_folder_path()
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
 def test_marker_inspect_normalizes_invalid_executor_payload() -> None:
     service = ResolveBackendService(
         FakeBridge(

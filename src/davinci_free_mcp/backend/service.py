@@ -25,6 +25,8 @@ from davinci_free_mcp.contracts import (
     ResolveMediaPoolListData,
     ResolveMarkerAddData,
     ResolveProjectCurrentData,
+    ResolveProjectManagerFolderListData,
+    ResolveProjectManagerFolderStateData,
     ResolveProjectListData,
     ResolveProjectOpenData,
     ResolveTimelineAppendClipsData,
@@ -72,6 +74,48 @@ class ResolveBackendService:
         return self._invoke_command(
             "project_list",
             ResolveProjectListData,
+            timeout_ms=timeout_ms,
+        )
+
+    def project_manager_folder_list(
+        self,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "project_manager_folder_list",
+            ResolveProjectManagerFolderListData,
+            timeout_ms=timeout_ms,
+        )
+
+    def project_manager_folder_open(
+        self,
+        name: str,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "project_manager_folder_open",
+            ResolveProjectManagerFolderStateData,
+            payload={"name": name},
+            timeout_ms=timeout_ms,
+        )
+
+    def project_manager_folder_up(
+        self,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "project_manager_folder_up",
+            ResolveProjectManagerFolderStateData,
+            timeout_ms=timeout_ms,
+        )
+
+    def project_manager_folder_path(
+        self,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "project_manager_folder_path",
+            ResolveProjectManagerFolderStateData,
             timeout_ms=timeout_ms,
         )
 

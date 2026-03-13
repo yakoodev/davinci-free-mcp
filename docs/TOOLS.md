@@ -141,6 +141,26 @@ Output contract:
 Preconditions:
 A project must be open.
 
+### `project_manager_folder_list`
+
+Purpose:
+Return the current project-manager folder, its direct child folders, and visible projects.
+
+### `project_manager_folder_open`
+
+Purpose:
+Switch into a direct child folder in the current project-manager context.
+
+### `project_manager_folder_up`
+
+Purpose:
+Move the project-manager context to its parent folder.
+
+### `project_manager_folder_path`
+
+Purpose:
+Return the current project-manager folder with breadcrumb path, child folders, and visible projects.
+
 ## Media Tools
 
 ### `media_import`
@@ -495,6 +515,10 @@ Delete a marker by frame on the current or specified timeline.
 
 - `resolve_health`
 - `project_list`
+- `project_manager_folder_list`
+- `project_manager_folder_open`
+- `project_manager_folder_up`
+- `project_manager_folder_path`
 - `project_open`
 - `project_current`
 - `media_import`

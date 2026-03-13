@@ -344,22 +344,85 @@ class FakeProject:
             self._current_timeline = timeline
 
 
+class FakeProjectManagerFolder:
+    def __init__(
+        self,
+        name: str,
+        subfolders: list["FakeProjectManagerFolder"] | None = None,
+        projects: list[str] | None = None,
+        parent: "FakeProjectManagerFolder" | None = None,
+    ) -> None:
+        self._name = name
+        self._subfolders = subfolders or []
+        self._projects = projects or []
+        self._parent = parent
+        for subfolder in self._subfolders:
+            subfolder._parent = self
+
+    def child_named(self, name: str) -> "FakeProjectManagerFolder" | None:
+        for subfolder in self._subfolders:
+            if subfolder._name == name:
+                return subfolder
+        return None
+
+
 class FakeProjectManager:
     def __init__(
         self,
         project: FakeProject | None,
         project_names: list[str] | None = None,
         known_projects: dict[str, FakeProject] | None = None,
+        root_folder: FakeProjectManagerFolder | None = None,
+        current_folder: FakeProjectManagerFolder | None = None,
     ) -> None:
         self._project = project
         self._project_names = project_names or []
         self._known_projects = known_projects or {}
+        self._root_folder = root_folder
+        self._current_folder = current_folder or root_folder
 
     def GetCurrentProject(self) -> FakeProject | None:
         return self._project
 
     def GetProjectListInCurrentFolder(self) -> list[str]:
+        if self._current_folder is not None:
+            return list(self._current_folder._projects)
         return self._project_names
+
+    def GetFolderListInCurrentFolder(self) -> list[str]:
+        if self._current_folder is None:
+            return []
+        return [folder._name for folder in self._current_folder._subfolders]
+
+    def GetFoldersInCurrentFolder(self) -> dict[int, str]:
+        folder_names = self.GetFolderListInCurrentFolder()
+        return {index: name for index, name in enumerate(folder_names, start=1)}
+
+    def GotoRootFolder(self) -> bool:
+        if self._root_folder is None:
+            return False
+        self._current_folder = self._root_folder
+        return True
+
+    def GotoParentFolder(self) -> bool:
+        if self._current_folder is None or self._current_folder._parent is None:
+            return False
+        self._current_folder = self._current_folder._parent
+        return True
+
+    def GetCurrentFolder(self) -> str | None:
+        if self._current_folder is None:
+            return None
+        return self._current_folder._name
+
+    def OpenFolder(self, folder_name: str) -> bool:
+        if self._current_folder is None:
+            return False
+        target = self._current_folder.child_named(folder_name)
+        if target is None:
+            return False
+        self._current_folder = target
+        return True
 
     def LoadProject(self, project_name: str) -> FakeProject | None:
         project = self._known_projects.get(project_name)
@@ -374,8 +437,16 @@ class FakeResolve:
         project: FakeProject | None,
         project_names: list[str] | None = None,
         known_projects: dict[str, FakeProject] | None = None,
+        project_root_folder: FakeProjectManagerFolder | None = None,
+        project_current_folder: FakeProjectManagerFolder | None = None,
     ) -> None:
-        self._project_manager = FakeProjectManager(project, project_names, known_projects)
+        self._project_manager = FakeProjectManager(
+            project,
+            project_names,
+            known_projects,
+            root_folder=project_root_folder,
+            current_folder=project_current_folder,
+        )
 
     def GetProductName(self) -> str:
         return "DaVinci Resolve"
@@ -514,6 +585,146 @@ def test_project_list_returns_current_folder_projects(tmp_path: Path) -> None:
             {"name": "Alpha"},
             {"name": "Beta"},
         ]
+    }
+
+
+def test_project_manager_folder_list_returns_current_folder_context(tmp_path: Path) -> None:
+    commercials = FakeProjectManagerFolder("Commercials", projects=["Spot A"])
+    clients = FakeProjectManagerFolder(
+        "Clients",
+        subfolders=[commercials, FakeProjectManagerFolder("Internal")],
+        projects=["Pitch Deck"],
+    )
+    root = FakeProjectManagerFolder("Root", subfolders=[clients], projects=["Global"])
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(
+            None,
+            project_root_folder=root,
+            project_current_folder=clients,
+        ),
+        "project_manager_folder_list",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "folder": {"name": "Clients"},
+        "subfolders": [{"name": "Commercials"}, {"name": "Internal"}],
+        "projects": [{"name": "Pitch Deck"}],
+    }
+
+
+def test_project_manager_folder_open_switches_to_child_folder(tmp_path: Path) -> None:
+    commercials = FakeProjectManagerFolder("Commercials", projects=["Spot A"])
+    clients = FakeProjectManagerFolder("Clients", subfolders=[commercials])
+    root = FakeProjectManagerFolder("Root", subfolders=[clients])
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(
+            None,
+            project_root_folder=root,
+            project_current_folder=root,
+        ),
+        "project_manager_folder_open",
+        "Clients",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "folder": {"name": "Clients"},
+        "path": [{"name": "Root"}, {"name": "Clients"}],
+        "subfolders": [{"name": "Commercials"}],
+        "projects": [],
+    }
+
+
+def test_project_manager_folder_up_switches_to_parent_folder(tmp_path: Path) -> None:
+    commercials = FakeProjectManagerFolder("Commercials", projects=["Spot A"])
+    clients = FakeProjectManagerFolder("Clients", subfolders=[commercials])
+    root = FakeProjectManagerFolder("Root", subfolders=[clients])
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(
+            None,
+            project_root_folder=root,
+            project_current_folder=commercials,
+        ),
+        "project_manager_folder_up",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "folder": {"name": "Clients"},
+        "path": [{"name": "Root"}, {"name": "Clients"}],
+        "subfolders": [{"name": "Commercials"}],
+        "projects": [],
+    }
+
+
+def test_project_manager_folder_path_returns_breadcrumb(tmp_path: Path) -> None:
+    commercials = FakeProjectManagerFolder("Commercials", projects=["Spot A"])
+    clients = FakeProjectManagerFolder("Clients", subfolders=[commercials])
+    root = FakeProjectManagerFolder("Root", subfolders=[clients], projects=["Global"])
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(
+            None,
+            project_root_folder=root,
+            project_current_folder=commercials,
+        ),
+        "project_manager_folder_path",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "folder": {"name": "Commercials"},
+        "path": [{"name": "Root"}, {"name": "Clients"}, {"name": "Commercials"}],
+        "subfolders": [],
+        "projects": [{"name": "Spot A"}],
+    }
+
+
+def test_project_manager_folder_up_rejects_root_folder(tmp_path: Path) -> None:
+    root = FakeProjectManagerFolder("Root", projects=["Global"])
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(
+            None,
+            project_root_folder=root,
+            project_current_folder=root,
+        ),
+        "project_manager_folder_up",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
+def test_project_manager_folder_path_normalizes_blank_root_name(tmp_path: Path) -> None:
+    root = FakeProjectManagerFolder("", projects=["Untitled Project 5"])
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(
+            None,
+            project_root_folder=root,
+            project_current_folder=root,
+        ),
+        "project_manager_folder_path",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "folder": {"name": "Root"},
+        "path": [{"name": "Root"}],
+        "subfolders": [],
+        "projects": [{"name": "Untitled Project 5"}],
     }
 
 

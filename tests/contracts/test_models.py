@@ -6,6 +6,7 @@ from davinci_free_mcp.contracts import (
     ResolveMediaClipInspectPathData,
     ResolveMediaPoolFolderRecursiveData,
     ResolveMediaPoolFolderStateData,
+    ResolveProjectManagerFolderStateData,
     ResolveTimelineClipsPlaceData,
     ResolveTimelineInspectData,
     ResolveTimelineItemDeleteData,
@@ -62,6 +63,24 @@ def test_media_pool_folder_state_data_round_trip() -> None:
 
     assert restored.path[1].name == "Selects"
     assert restored.clips[0].name == "clip001.mov"
+
+
+def test_project_manager_folder_state_data_round_trip() -> None:
+    payload = ResolveProjectManagerFolderStateData.model_validate(
+        {
+            "folder": {"name": "Commercials"},
+            "path": [{"name": "Root"}, {"name": "Clients"}, {"name": "Commercials"}],
+            "subfolders": [{"name": "2026"}],
+            "projects": [{"name": "Spot A"}],
+        }
+    )
+
+    restored = ResolveProjectManagerFolderStateData.model_validate(
+        payload.model_dump(mode="json")
+    )
+
+    assert restored.path[1].name == "Clients"
+    assert restored.projects[0].name == "Spot A"
 
 
 def test_timeline_inspect_data_round_trip() -> None:

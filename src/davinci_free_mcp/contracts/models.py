@@ -115,6 +115,23 @@ class ResolveProjectSummary(BaseModel):
     name: str
 
 
+class ResolveProjectManagerFolderSummary(BaseModel):
+    name: str
+
+
+class ResolveProjectManagerFolderListData(BaseModel):
+    folder: ResolveProjectManagerFolderSummary
+    subfolders: list[ResolveProjectManagerFolderSummary] = Field(default_factory=list)
+    projects: list[ResolveProjectSummary] = Field(default_factory=list)
+
+
+class ResolveProjectManagerFolderStateData(BaseModel):
+    folder: ResolveProjectManagerFolderSummary
+    path: list[ResolveProjectManagerFolderSummary] = Field(default_factory=list)
+    subfolders: list[ResolveProjectManagerFolderSummary] = Field(default_factory=list)
+    projects: list[ResolveProjectSummary] = Field(default_factory=list)
+
+
 class ResolveTimelineSummary(BaseModel):
     index: int
     name: str

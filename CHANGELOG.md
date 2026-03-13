@@ -4,7 +4,8 @@
 
 ## Unreleased
 
-- Пока нет незарелизенных записей.
+- Добавлены `project_manager_folder_list`, `project_manager_folder_open`, `project_manager_folder_up`, `project_manager_folder_path`.
+- Расширен low-level project-manager navigation с breadcrumb/path и списком дочерних folders/projects.
 
 ## История изменений
 
