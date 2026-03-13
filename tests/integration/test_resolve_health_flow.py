@@ -5,7 +5,9 @@ from pathlib import Path
 from davinci_free_mcp.backend import ResolveBackendService
 from davinci_free_mcp.bridge import FileQueueBridge
 from davinci_free_mcp.config import AppSettings
+from davinci_free_mcp.contracts import BridgeCommand
 from davinci_free_mcp.resolve_exec import ResolveExecutor
+from davinci_free_mcp.resolve_exec.command_core import execute_resolve_command
 
 
 class FakeMediaPoolItem:
@@ -179,9 +181,15 @@ class FakeProject:
 
 
 class FakeProjectManager:
-    def __init__(self, project: FakeProject | None, project_names: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        project: FakeProject | None,
+        project_names: list[str] | None = None,
+        known_projects: dict[str, FakeProject] | None = None,
+    ) -> None:
         self._project = project
         self._project_names = project_names or []
+        self._known_projects = known_projects or {}
 
     def GetCurrentProject(self) -> FakeProject | None:
         return self._project
@@ -189,10 +197,21 @@ class FakeProjectManager:
     def GetProjectListInCurrentFolder(self) -> list[str]:
         return self._project_names
 
+    def LoadProject(self, project_name: str) -> FakeProject | None:
+        project = self._known_projects.get(project_name)
+        if project is not None:
+            self._project = project
+        return project
+
 
 class FakeResolve:
-    def __init__(self, project: FakeProject | None, project_names: list[str] | None = None) -> None:
-        self._project_manager = FakeProjectManager(project, project_names)
+    def __init__(
+        self,
+        project: FakeProject | None,
+        project_names: list[str] | None = None,
+        known_projects: dict[str, FakeProject] | None = None,
+    ) -> None:
+        self._project_manager = FakeProjectManager(project, project_names, known_projects)
 
     def GetProductName(self) -> str:
         return "DaVinci Resolve"
@@ -244,6 +263,7 @@ def invoke_with_executor(
 
 def build_project(
     *,
+    name: str = "Demo Project",
     current_timeline: FakeTimeline | None = None,
     timelines: list[FakeTimeline] | None = None,
     folder_name: str = "Master",
@@ -257,7 +277,7 @@ def build_project(
         clips=clip_items or [FakeMediaPoolItem(name) for name in (clip_names or [])],
     )
     return FakeProject(
-        "Demo Project",
+        name,
         timelines=timelines,
         current_timeline=current_timeline,
         media_pool_folder=media_folder,
@@ -276,6 +296,31 @@ def test_backend_resolve_health_end_to_end(tmp_path: Path) -> None:
     assert result.data["resolve"]["connected"] is True
     assert result.data["project"]["open"] is True
     assert result.data["project"]["name"] == "Demo Project"
+
+
+def test_shared_command_core_matches_executor_result_shape(tmp_path: Path) -> None:
+    project = build_project(
+        timelines=[FakeTimeline("Assembly", video_tracks=[[FakeTimelineItem("clip001.mov", 0, 100)]])],
+        current_timeline=FakeTimeline("Scratch"),
+        clip_names=["clip001.mov"],
+    )
+    resolve = FakeResolve(project, ["Demo Project"])
+    command = BridgeCommand(
+        command="timeline_items_list",
+        target={"timeline": "Assembly"},
+        payload={},
+        context={"tool_name": "timeline_items_list"},
+    )
+    executor = ResolveExecutor(build_settings(tmp_path), resolve_provider=lambda: resolve)
+
+    executor_result = executor.handle_command(command)
+    core_result = execute_resolve_command(
+        command.model_dump(mode="json"),
+        lambda: resolve,
+        adapter_name="file_queue",
+    )
+
+    assert executor_result.model_dump(mode="json") == core_result
 
 
 def test_project_current_reports_no_project_warning(tmp_path: Path) -> None:
@@ -304,6 +349,84 @@ def test_project_list_returns_current_folder_projects(tmp_path: Path) -> None:
             {"name": "Alpha"},
             {"name": "Beta"},
         ]
+    }
+
+
+def test_project_open_switches_to_named_project(tmp_path: Path) -> None:
+    target_project = build_project(name="Beta")
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(
+            None,
+            ["Alpha", "Beta"],
+            {"Beta": target_project},
+        ),
+        "project_open",
+        "Beta",
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "opened": True,
+        "project": {"open": True, "name": "Beta"},
+    }
+
+
+def test_project_open_returns_not_found_for_unknown_project(tmp_path: Path) -> None:
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(None, ["Alpha"]),
+        "project_open",
+        "Missing",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "object_not_found"
+
+
+def test_project_open_requires_resolve_handle(tmp_path: Path) -> None:
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: None,
+        "project_open",
+        "Alpha",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "resolve_not_ready"
+
+
+def test_project_open_updates_project_current_state(tmp_path: Path) -> None:
+    settings = build_settings(tmp_path)
+    bridge = FileQueueBridge(settings)
+    beta_project = build_project(name="Beta")
+    backend = ResolveBackendService(bridge, settings)
+    fake_resolve = FakeResolve(
+        None,
+        ["Alpha", "Beta"],
+        {"Beta": beta_project},
+    )
+    executor = ResolveExecutor(
+        settings,
+        resolve_provider=lambda: fake_resolve,
+    )
+
+    open_thread = threading.Thread(target=process_until_handled, args=(executor,))
+    open_thread.start()
+    open_result = backend.project_open("Beta")
+    open_thread.join()
+
+    current_thread = threading.Thread(target=process_until_handled, args=(executor,))
+    current_thread.start()
+    current_result = backend.project_current()
+    current_thread.join()
+
+    assert open_result.success is True
+    assert current_result.success is True
+    assert current_result.data == {
+        "project": {"open": True, "name": "Beta"},
     }
 
 

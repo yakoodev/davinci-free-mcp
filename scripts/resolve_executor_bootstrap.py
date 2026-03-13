@@ -1,9 +1,9 @@
 """
-Standalone DaVinci Resolve Free executor bootstrap.
+Standalone DaVinci Resolve Free executor bootstrap template.
 
-Modes:
-- file_queue: poll requests/results from the shared runtime directory
-- local_http: expose a local REST API from inside Resolve
+The install script renders this template into the Resolve script directory by:
+- injecting the local repository root
+- embedding the shared command core source
 """
 
 import json
@@ -26,14 +26,24 @@ except ImportError:
     raise
 
 
-REPO_ROOT = Path(r"C:\Users\Yakoo\source\repos\DavinciFreeMcp")
+# The installer replaces this placeholder with the current repo root. When the
+# template is run from the repo directly, fall back to the template location.
+_INSTALL_REPO_ROOT = "__DFMCP_INSTALL_REPO_ROOT__"
+if _INSTALL_REPO_ROOT.startswith("__DFMCP_"):
+    REPO_ROOT = Path(__file__).resolve().parents[1]
+else:
+    REPO_ROOT = Path(_INSTALL_REPO_ROOT)
+
+
+# __DFMCP_EMBEDDED_COMMAND_CORE__
+
+
 RUNTIME_DIR = REPO_ROOT / "runtime"
 REQUESTS_DIR = RUNTIME_DIR / "spool" / "requests"
 RESULTS_DIR = RUNTIME_DIR / "spool" / "results"
 DEADLETTER_DIR = RUNTIME_DIR / "spool" / "deadletter"
 LOGS_DIR = RUNTIME_DIR / "logs"
 STATUS_DIR = RUNTIME_DIR / "status"
-CONFIG_DIR = RUNTIME_DIR / "config"
 STATUS_PATH = STATUS_DIR / "executor_status.json"
 LOCK_PATH = STATUS_DIR / "executor.lock.json"
 POLL_INTERVAL_MS = 150
@@ -45,7 +55,7 @@ LOCK_TOKEN = uuid.uuid4().hex
 
 
 def ensure_dirs():
-    for path in (REQUESTS_DIR, RESULTS_DIR, DEADLETTER_DIR, LOGS_DIR, STATUS_DIR, CONFIG_DIR):
+    for path in (REQUESTS_DIR, RESULTS_DIR, DEADLETTER_DIR, LOGS_DIR, STATUS_DIR):
         if not path.exists():
             path.mkdir(parents=True)
 
@@ -112,8 +122,7 @@ def parse_iso(value):
 
 def get_resolve():
     try:
-        resolve = app.GetResolve()  # noqa: F821
-        return resolve
+        return app.GetResolve()  # noqa: F821
     except Exception:
         return None
 
@@ -190,13 +199,9 @@ def current_context():
     current_project = safe_call(project_manager, "GetCurrentProject") if project_manager is not None else None
     current_timeline = safe_call(current_project, "GetCurrentTimeline") if current_project is not None else None
     return {
-        "resolve": resolve,
         "resolve_connected": resolve_connected,
         "product_name": product_name,
         "version": version,
-        "project_manager": project_manager,
-        "current_project": current_project,
-        "current_timeline": current_timeline,
         "project_open": current_project is not None,
         "project_name": safe_call(current_project, "GetName") if current_project is not None else None,
         "timeline_available": current_timeline is not None,
@@ -394,614 +399,20 @@ def move_to_deadletter(request_path):
     shutil.move(str(request_path), str(target))
 
 
-def make_error(category, message, details=None):
-    return {"category": category, "message": message, "details": details or {}}
+def execute_command_payload(command_payload):
+    return execute_resolve_command(command_payload, get_resolve, adapter_name=BRIDGE_MODE)
 
 
-def make_result(request_id, ok, data=None, error=None, warnings=None, meta=None):
-    return {
-        "request_id": request_id,
-        "ok": ok,
-        "data": data,
-        "error": error,
-        "warnings": warnings or [],
-        "meta": meta or {"bridge": BRIDGE_MODE},
-    }
-
-
-def current_project():
-    return current_context()["current_project"]
-
-
-def list_project_names(project_manager):
-    project_names = safe_call(project_manager, "GetProjectListInCurrentFolder")
-    if isinstance(project_names, list):
-        return [str(name) for name in project_names]
-    current_folder = safe_call(project_manager, "GetCurrentFolder")
-    project_names = safe_call(current_folder, "GetProjectList")
-    if isinstance(project_names, list):
-        return [str(name) for name in project_names]
-    return []
-
-
-def list_timelines(project):
-    timeline_count = safe_call(project, "GetTimelineCount") or 0
-    items = []
-    for index in range(1, int(timeline_count) + 1):
-        timeline = safe_call(project, "GetTimelineByIndex", index)
-        if timeline is None:
-            continue
-        items.append({"index": index, "name": safe_call(timeline, "GetName") or ("Timeline %s" % index)})
-    return items
-
-
-def timeline_index(project, timeline):
-    timeline_count = safe_call(project, "GetTimelineCount") or 0
-    timeline_name = safe_call(timeline, "GetName")
-    for index in range(1, int(timeline_count) + 1):
-        candidate = safe_call(project, "GetTimelineByIndex", index)
-        if candidate is timeline:
-            return index
-        if timeline_name and safe_call(candidate, "GetName") == timeline_name:
-            return index
-    return 1
-
-
-def timeline_summary(project, timeline):
-    return {
-        "index": timeline_index(project, timeline),
-        "name": safe_call(timeline, "GetName") or "Timeline",
-    }
-
-
-def resolve_timeline_by_name(project, timeline_name):
-    timeline_count = safe_call(project, "GetTimelineCount") or 0
-    for index in range(1, int(timeline_count) + 1):
-        timeline = safe_call(project, "GetTimelineByIndex", index)
-        if safe_call(timeline, "GetName") == timeline_name:
-            return timeline
-    return None
-
-
-def media_pool(project):
-    return safe_call(project, "GetMediaPool")
-
-
-def current_media_pool_folder(project):
-    pool = media_pool(project)
-    if pool is None:
-        return None
-    return safe_call(pool, "GetCurrentFolder")
-
-
-def list_media_subfolders(folder):
-    subfolders = safe_call(folder, "GetSubFolderList")
-    if isinstance(subfolders, list):
-        return subfolders
-    subfolders = safe_call(folder, "GetSubFolders")
-    if isinstance(subfolders, list):
-        return subfolders
-    if isinstance(subfolders, dict):
-        return list(subfolders.values())
-    return []
-
-
-def list_media_clips(folder):
-    clips = safe_call(folder, "GetClipList")
-    if isinstance(clips, list):
-        return [clip for clip in clips if is_media_pool_clip(clip)]
-    clips = safe_call(folder, "GetClips")
-    if isinstance(clips, list):
-        return [clip for clip in clips if is_media_pool_clip(clip)]
-    if isinstance(clips, dict):
-        return [clip for clip in clips.values() if is_media_pool_clip(clip)]
-    return []
-
-
-def clip_name(clip):
-    name = safe_call(clip, "GetName")
-    if name:
-        return str(name)
-    properties = safe_call(clip, "GetClipProperty")
-    if isinstance(properties, dict):
-        current_name = properties.get("Clip Name") or properties.get("File Name")
-        if current_name:
-            return str(current_name)
-    return None
-
-
-def clip_properties(clip):
-    properties = safe_call(clip, "GetClipProperty")
-    if isinstance(properties, dict):
-        return properties
-    return {}
-
-
-def is_media_pool_clip(clip):
-    properties = clip_properties(clip)
-    if not properties:
-        return True
-
-    type_markers = [
-        properties.get("Type"),
-        properties.get("Clip Type"),
-        properties.get("TypeName"),
-    ]
-    normalized_markers = set()
-    for value in type_markers:
-        if value is not None:
-            normalized_markers.add(str(value).strip().lower())
-    if "timeline" in normalized_markers:
-        return False
-
-    media_markers = ["File Path", "Video Codec", "Audio Codec", "Frames", "Duration"]
-    for key in media_markers:
-        if properties.get(key) not in (None, ""):
-            return True
-    return False
-
-
-def timeline_item_name(item):
-    name = safe_call(item, "GetName")
-    if name:
-        return str(name)
-    media_pool_item = safe_call(item, "GetMediaPoolItem")
-    return clip_name(media_pool_item)
-
-
-def timeline_item_frame(item, method_name):
-    value = safe_call(item, method_name)
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except Exception:
-        return None
-
-
-def resolve_clip_by_name(folder, requested_name):
-    matches = []
-    for clip in list_media_clips(folder):
-        if clip_name(clip) == requested_name:
-            matches.append(clip)
-
-    if not matches:
-        return None, make_error(
-            "object_not_found",
-            "Clip '%s' was not found in the current media pool folder." % requested_name,
-        )
-
-    if len(matches) > 1:
-        return None, make_error(
-            "validation_error",
-            "Clip name '%s' is ambiguous in the current media pool folder." % requested_name,
-            details={"clip_name": requested_name, "match_count": len(matches)},
-        )
-
-    return matches[0], None
-
-
-def create_auto_timeline(project):
-    pool = media_pool(project)
-    if pool is None:
-        return None
-
-    suffix = 1
-    while True:
-        if suffix == 1:
-            timeline_name = "Imported Timeline"
-        else:
-            timeline_name = "Imported Timeline %s" % suffix
-
-        if resolve_timeline_by_name(project, timeline_name) is None:
-            timeline = safe_call(pool, "CreateEmptyTimeline", timeline_name)
-            if timeline is None:
-                timeline = resolve_timeline_by_name(project, timeline_name)
-            return timeline
-        suffix += 1
-
-
-def handle_resolve_health(request_id, command_payload):
-    resolve = get_resolve()
-    if resolve is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("resolve_not_ready", "Resolve handle is not available in embedded environment."),
-        )
-    project = current_project()
-    warnings = []
-    if project is None:
-        warnings.append("no_project_open")
-    data = {
-        "bridge": {"available": True, "adapter": BRIDGE_MODE},
-        "executor": {"running": True},
-        "resolve": {
-            "connected": True,
-            "product_name": safe_call(resolve, "GetProductName"),
-            "version": safe_call(resolve, "GetVersionString"),
-        },
-        "project": {"open": project is not None, "name": safe_call(project, "GetName")},
-    }
-    return make_result(request_id, True, data=data, warnings=warnings)
-
-
-def handle_project_current(request_id, command_payload):
-    project = current_project()
-    warnings = []
-    if project is None:
-        warnings.append("no_project_open")
-    return make_result(
-        request_id,
-        True,
-        data={"project": {"open": project is not None, "name": safe_call(project, "GetName")}},
-        warnings=warnings,
-    )
-
-
-def handle_project_list(request_id, command_payload):
-    resolve = get_resolve()
-    if resolve is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("resolve_not_ready", "Resolve handle is not available in embedded environment."),
-        )
-    project_manager = safe_call(resolve, "GetProjectManager")
-    project_names = list_project_names(project_manager)
-    return make_result(request_id, True, data={"projects": [{"name": name} for name in project_names]})
-
-
-def handle_timeline_list(request_id, command_payload):
-    project = current_project()
-    if project is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("no_project_open", "No current project is open in Resolve."),
-        )
-    return make_result(
-        request_id,
-        True,
-        data={
-            "project": {"open": True, "name": safe_call(project, "GetName")},
-            "timelines": list_timelines(project),
-        },
-    )
-
-
-def handle_timeline_current(request_id, command_payload):
-    project = current_project()
-    if project is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("no_project_open", "No current project is open in Resolve."),
-        )
-
-    timeline = safe_call(project, "GetCurrentTimeline")
-    if timeline is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("no_current_timeline", "No current timeline is active in Resolve."),
-        )
-
-    return make_result(
-        request_id,
-        True,
-        data={
-            "project": {"open": True, "name": safe_call(project, "GetName")},
-            "timeline": timeline_summary(project, timeline),
-        },
-    )
-
-
-def handle_timeline_create_empty(request_id, command_payload):
-    project = current_project()
-    if project is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("no_project_open", "No current project is open in Resolve."),
-        )
-
-    payload = command_payload.get("payload") or {}
-    timeline_name = str(payload.get("name") or "").strip()
-    if not timeline_name:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("validation_error", "Timeline name is required."),
-        )
-
-    pool = media_pool(project)
-    if pool is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("object_not_found", "Current media pool is not available."),
-        )
-
-    timeline = safe_call(pool, "CreateEmptyTimeline", timeline_name)
-    if timeline is None:
-        timeline = resolve_timeline_by_name(project, timeline_name)
-
-    if timeline is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("execution_failure", "Resolve did not create timeline '%s'." % timeline_name),
-        )
-
-    return make_result(
-        request_id,
-        True,
-        data={
-            "created": True,
-            "timeline": timeline_summary(project, timeline),
-        },
-    )
-
-
-def handle_media_pool_list(request_id, command_payload):
-    project = current_project()
-    if project is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("no_project_open", "No current project is open in Resolve."),
-        )
-
-    folder = current_media_pool_folder(project)
-    if folder is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("object_not_found", "Current media pool folder is not available."),
-        )
-
-    return make_result(
-        request_id,
-        True,
-        data={
-            "folder": {"name": safe_call(folder, "GetName") or "Current Folder"},
-            "subfolders": [
-                {"name": safe_call(subfolder, "GetName") or "Folder"}
-                for subfolder in list_media_subfolders(folder)
-            ],
-            "clips": [
-                {"name": clip_name(clip) or "Unnamed Clip"}
-                for clip in list_media_clips(folder)
-            ],
-        },
-    )
-
-
-def handle_media_import(request_id, command_payload):
-    project = current_project()
-    if project is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("no_project_open", "No current project is open in Resolve."),
-        )
-
-    payload = command_payload.get("payload") or {}
-    paths = payload.get("paths")
-    if not isinstance(paths, list) or not paths:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("validation_error", "Import requires at least one path."),
-        )
-
-    pool = media_pool(project)
-    if pool is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("object_not_found", "Current media pool is not available."),
-        )
-
-    imported_items = safe_call(pool, "ImportMedia", paths)
-    if not isinstance(imported_items, list):
-        imported_items = []
-
-    items = []
-    for index, item in enumerate(imported_items):
-        fallback_name = str(paths[index]) if index < len(paths) else "Imported Item"
-        items.append({"name": clip_name(item) or fallback_name})
-
-    return make_result(
-        request_id,
-        True,
-        data={
-            "imported_count": len(imported_items),
-            "items": items,
-        },
-    )
-
-
-def handle_timeline_append_clips(request_id, command_payload):
-    project = current_project()
-    if project is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("no_project_open", "No current project is open in Resolve."),
-        )
-
-    payload = command_payload.get("payload") or {}
-    requested_clip_names = payload.get("clip_names")
-    if not isinstance(requested_clip_names, list) or not requested_clip_names:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("validation_error", "At least one clip name is required."),
-        )
-
-    folder = current_media_pool_folder(project)
-    if folder is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("object_not_found", "Current media pool folder is not available."),
-        )
-
-    resolved_clips = []
-    for requested_name in requested_clip_names:
-        clip, error = resolve_clip_by_name(folder, str(requested_name))
-        if error is not None:
-            return make_result(request_id, False, error=error)
-        resolved_clips.append(clip)
-
-    target = command_payload.get("target") or {}
-    timeline_name = target.get("timeline")
-    if timeline_name:
-        timeline = resolve_timeline_by_name(project, str(timeline_name))
-        if timeline is None:
-            return make_result(
-                request_id,
-                False,
-                error=make_error("object_not_found", "Timeline '%s' was not found." % timeline_name),
-            )
-    else:
-        timeline = safe_call(project, "GetCurrentTimeline")
-        if timeline is None:
-            timeline = create_auto_timeline(project)
-            if timeline is None:
-                return make_result(
-                    request_id,
-                    False,
-                    error=make_error(
-                        "execution_failure",
-                        "Resolve could not create an automatic timeline for append.",
-                    ),
-                )
-
-    pool = media_pool(project)
-    if pool is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("object_not_found", "Current media pool is not available."),
-        )
-
-    safe_call(project, "SetCurrentTimeline", timeline)
-    appended = bool(safe_call(pool, "AppendToTimeline", resolved_clips))
-    if not appended:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("execution_failure", "Resolve failed to append the requested clips."),
-        )
-
-    return make_result(
-        request_id,
-        True,
-        data={
-            "timeline": timeline_summary(project, timeline),
-            "appended": True,
-            "count": len(resolved_clips),
-            "clip_names": [str(name) for name in requested_clip_names],
-        },
-    )
-
-
-def handle_timeline_items_list(request_id, command_payload):
-    project = current_project()
-    if project is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("no_project_open", "No current project is open in Resolve."),
-        )
-
-    target = command_payload.get("target") or {}
-    timeline_name = target.get("timeline")
-    if timeline_name:
-        timeline = resolve_timeline_by_name(project, str(timeline_name))
-    else:
-        timeline = safe_call(project, "GetCurrentTimeline")
-
-    if timeline is None:
-        if timeline_name:
-            error = make_error("object_not_found", "Timeline '%s' was not found." % timeline_name)
-        else:
-            error = make_error("no_current_timeline", "No current timeline is active in Resolve.")
-        return make_result(request_id, False, error=error)
-
-    tracks = []
-    for track_type in ("video", "audio"):
-        track_count = safe_call(timeline, "GetTrackCount", track_type) or 0
-        for track_index in range(1, int(track_count) + 1):
-            items = safe_call(timeline, "GetItemListInTrack", track_type, track_index)
-            if not isinstance(items, list):
-                items = []
-            track_items = []
-            for item_index, item in enumerate(items):
-                track_items.append(
-                    {
-                        "item_index": item_index,
-                        "name": timeline_item_name(item) or ("%s item %s" % (track_type, item_index)),
-                        "start_frame": timeline_item_frame(item, "GetStart"),
-                        "end_frame": timeline_item_frame(item, "GetEnd"),
-                    }
-                )
-            tracks.append(
-                {
-                    "track_type": track_type,
-                    "track_index": track_index,
-                    "items": track_items,
-                }
-            )
-
-    return make_result(
-        request_id,
-        True,
-        data={
-            "project": {"open": True, "name": safe_call(project, "GetName")},
-            "timeline": timeline_summary(project, timeline),
-            "tracks": tracks,
-        },
-    )
-
-
-COMMAND_HANDLERS = {
-    "resolve_health": handle_resolve_health,
-    "project_current": handle_project_current,
-    "project_list": handle_project_list,
-    "timeline_list": handle_timeline_list,
-    "timeline_current": handle_timeline_current,
-    "timeline_create_empty": handle_timeline_create_empty,
-    "media_pool_list": handle_media_pool_list,
-    "media_import": handle_media_import,
-    "timeline_append_clips": handle_timeline_append_clips,
-    "timeline_items_list": handle_timeline_items_list,
-}
-
-
-def execute_command(request_id, command, payload):
-    handler = COMMAND_HANDLERS.get(command)
-    if handler is None:
-        return make_result(
-            request_id,
-            False,
-            error=make_error("unsupported_command", "Unsupported command '%s' for executor." % command),
-        )
-    return handler(request_id, payload)
-
-
-def record_result(request_id, command, result):
-    if result["ok"]:
-        console_line("handled | id=%s | command=%s" % (request_id, command))
+def record_result(request_id, command_name, result):
+    if result.get("ok"):
+        console_line("handled | id=%s | command=%s" % (request_id, command_name))
         update_status(last_request_id=request_id, request_handled=True, last_error="")
-    else:
-        error = result.get("error") or {}
-        message = error.get("message") or "request failed"
-        console_line("error | %s" % message)
-        update_status(last_request_id=request_id, request_handled=True, last_error=message)
+        return
+
+    error = result.get("error") or {}
+    message = error.get("message") or "request failed"
+    console_line("error | %s" % message)
+    update_status(last_request_id=request_id, request_handled=True, last_error=message)
 
 
 def process_request_file(request_path):
@@ -1015,8 +426,8 @@ def process_request_file(request_path):
         return
 
     request_id = payload.get("request_id", "unknown")
-    command = payload.get("command")
-    result = execute_command(request_id, command, payload)
+    command_name = payload.get("command") or ""
+    result = execute_command_payload(payload)
 
     result_path = RESULTS_DIR / ("%s.json" % request_id)
     if not best_effort_write_json(result_path, result):
@@ -1028,12 +439,10 @@ def process_request_file(request_path):
     except Exception:
         pass
 
-    record_result(request_id, command, result)
+    record_result(request_id, command_name, result)
 
 
 class RequestHandler(BaseHTTPRequestHandler):
-    runtime = None
-
     def _write_json(self, status_code, payload):
         raw = json.dumps(payload, indent=2).encode("utf-8")
         self.send_response(status_code)
@@ -1044,12 +453,14 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            payload = {
-                "running": True,
-                "instance_id": INSTANCE_ID,
-                "bridge_mode": BRIDGE_MODE,
-            }
-            self._write_json(200, payload)
+            self._write_json(
+                200,
+                {
+                    "running": True,
+                    "instance_id": INSTANCE_ID,
+                    "bridge_mode": BRIDGE_MODE,
+                },
+            )
             return
         if self.path == "/status":
             self._write_json(200, load_status())
@@ -1068,18 +479,25 @@ class RequestHandler(BaseHTTPRequestHandler):
         except Exception:
             self._write_json(
                 400,
-                make_result(
-                    "unknown",
-                    False,
-                    error=make_error("validation_error", "Request body is not valid JSON."),
-                ),
+                {
+                    "request_id": "unknown",
+                    "ok": False,
+                    "data": None,
+                    "error": {
+                        "category": "validation_error",
+                        "message": "Request body is not valid JSON.",
+                        "details": {},
+                    },
+                    "warnings": [],
+                    "meta": {"bridge": BRIDGE_MODE},
+                },
             )
             return
 
-        request_id = payload.get("request_id") or uuid.uuid4().hex
-        command = payload.get("command") or command_name
-        result = execute_command(request_id, command, payload)
-        record_result(request_id, command, result)
+        payload.setdefault("request_id", uuid.uuid4().hex)
+        payload.setdefault("command", command_name)
+        result = execute_command_payload(payload)
+        record_result(payload["request_id"], payload["command"], result)
         self._write_json(200, result)
 
     def log_message(self, format_string, *args):
@@ -1091,7 +509,10 @@ def heartbeat():
     last_request_id = (status.get("last_request_id") or "-")[:8]
     processed_count = status.get("processed_count", 0)
     context_summary = format_context_summary()
-    console_line("alive | processed=%s | last_request=%s | %s" % (processed_count, last_request_id, context_summary))
+    console_line(
+        "alive | processed=%s | last_request=%s | %s"
+        % (processed_count, last_request_id, context_summary)
+    )
 
 
 def run_file_queue():
@@ -1111,8 +532,6 @@ def run_file_queue():
 
 def run_local_http():
     last_heartbeat_at = 0.0
-    # The backend may connect through a Docker-specific hostname while the
-    # executor still needs to bind on a local host interface.
     server = HTTPServer((LOCAL_HTTP_BIND_HOST, LOCAL_HTTP_PORT), RequestHandler)
     server.timeout = max(POLL_INTERVAL_MS / 1000.0, 0.1)
     console_line(

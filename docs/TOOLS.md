@@ -143,32 +143,6 @@ A project must be open.
 
 ## Media Tools
 
-### `media_browse`
-
-Purpose:
-Browse mounted storage, subfolders, or files visible to Resolve.
-
-Minimum inputs:
-
-```json
-{
-  "path": "optional-absolute-or-mounted-path"
-}
-```
-
-Output contract:
-
-```json
-{
-  "path": "C:/media",
-  "subfolders": ["A", "B"],
-  "files": ["clip001.mov", "clip002.wav"]
-}
-```
-
-Preconditions:
-Resolve executor is running.
-
 ### `media_import`
 
 Purpose:
@@ -204,14 +178,12 @@ MVP should avoid advanced import variants until basic import is stable.
 ### `media_pool_list`
 
 Purpose:
-List clips and subfolders in the current or specified media pool folder.
+List clips and subfolders in the current media pool folder.
 
 Minimum inputs:
 
 ```json
-{
-  "folder_path": "optional-logical-media-pool-path"
-}
+{}
 ```
 
 Output contract:
@@ -224,8 +196,7 @@ Output contract:
   "subfolders": [],
   "clips": [
     {
-      "name": "clip001.mov",
-      "media_id": "optional-id"
+      "name": "clip001.mov"
     }
   ]
 }
@@ -324,11 +295,7 @@ Minimum inputs:
 ```json
 {
   "timeline_name": "optional-target-timeline",
-  "clip_refs": [
-    {
-      "media_id": "clip-id"
-    }
-  ]
+  "clip_names": ["clip001.mov"]
 }
 ```
 
@@ -336,25 +303,28 @@ Output contract:
 
 ```json
 {
+  "timeline": {
+    "name": "Assembly",
+    "index": 1
+  },
   "appended": true,
-  "count": 1
+  "count": 1,
+  "clip_names": ["clip001.mov"]
 }
 ```
 
 Preconditions:
-Project must be open, timeline must exist, clip references must resolve.
+Project must be open, timeline must exist, clip names must resolve in the current media pool folder.
 
 ### `timeline_items_list`
 
 Purpose:
-List items in a timeline track.
+List grouped items across all video and audio tracks in the current or specified timeline.
 
 Minimum inputs:
 
 ```json
 {
-  "track_type": "video",
-  "track_index": 1,
   "timeline_name": "optional-target-timeline"
 }
 ```
@@ -363,12 +333,26 @@ Output contract:
 
 ```json
 {
-  "items": [
+  "project": {
+    "name": "Current Project",
+    "open": true
+  },
+  "timeline": {
+    "name": "Assembly",
+    "index": 1
+  },
+  "tracks": [
     {
-      "item_index": 0,
-      "name": "clip001.mov",
-      "start_frame": 100,
-      "end_frame": 200
+      "track_type": "video",
+      "track_index": 1,
+      "items": [
+        {
+          "item_index": 0,
+          "name": "clip001.mov",
+          "start_frame": 100,
+          "end_frame": 200
+        }
+      ]
     }
   ]
 }
@@ -376,36 +360,6 @@ Output contract:
 
 Preconditions:
 Timeline and track must exist.
-
-### `marker_add`
-
-Purpose:
-Add a marker to the current timeline or a specific timeline item.
-
-Minimum inputs:
-
-```json
-{
-  "scope": "timeline",
-  "frame": 100,
-  "color": "Blue",
-  "name": "Review",
-  "note": "Check this cut",
-  "duration": 1
-}
-```
-
-Output contract:
-
-```json
-{
-  "added": true,
-  "scope": "timeline"
-}
-```
-
-Preconditions:
-Target timeline or item must resolve.
 
 ## Low-Level vs Composite Tools
 
@@ -415,7 +369,6 @@ Target timeline or item must resolve.
 - `project_list`
 - `project_open`
 - `project_current`
-- `media_browse`
 - `media_import`
 - `media_pool_list`
 - `timeline_list`
@@ -423,7 +376,6 @@ Target timeline or item must resolve.
 - `timeline_create_empty`
 - `timeline_append_clips`
 - `timeline_items_list`
-- `marker_add`
 
 ### Composite tools for later
 
@@ -434,6 +386,8 @@ Target timeline or item must resolve.
 
 ## Explicit Deferrals
 
+- `media_browse`
+- `marker_add`
 - render automation breadth
 - Fusion-heavy actions
 - cloud/database switching
