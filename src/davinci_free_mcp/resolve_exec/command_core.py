@@ -41,10 +41,13 @@ class ResolveCommandCore(object):
             "media_clip_inspect_path": self._handle_media_clip_inspect_path,
             "media_import": self._handle_media_import,
             "timeline_append_clips": self._handle_timeline_append_clips,
+            "timeline_clips_place": self._handle_timeline_clips_place,
             "timeline_create_from_clips": self._handle_timeline_create_from_clips,
             "timeline_items_list": self._handle_timeline_items_list,
             "timeline_track_items_list": self._handle_timeline_track_items_list,
             "timeline_track_inspect": self._handle_timeline_track_inspect,
+            "timeline_item_inspect": self._handle_timeline_item_inspect,
+            "timeline_item_delete": self._handle_timeline_item_delete,
             "timeline_inspect": self._handle_timeline_inspect,
             "marker_add": self._handle_marker_add,
             "marker_list": self._handle_marker_list,
@@ -962,6 +965,183 @@ class ResolveCommandCore(object):
             },
         )
 
+    def _handle_timeline_clips_place(self, command, resolve):
+        current_project = self._current_project(resolve)
+        if current_project is None:
+            return self._failure(
+                command["request_id"],
+                "no_project_open",
+                "No current project is open in Resolve.",
+            )
+
+        placements = command["payload"].get("placements")
+        if not isinstance(placements, list) or not placements:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "At least one clip placement is required.",
+            )
+
+        timeline_name = command["target"].get("timeline")
+        if timeline_name:
+            timeline = self._resolve_timeline_by_name(current_project, str(timeline_name))
+        else:
+            timeline = self._safe_call(current_project, "GetCurrentTimeline")
+        if timeline is None:
+            return self._failure(
+                command["request_id"],
+                "no_current_timeline" if not timeline_name else "object_not_found",
+                "No current timeline is active in Resolve."
+                if not timeline_name
+                else "Timeline '%s' was not found." % timeline_name,
+            )
+
+        current_folder = self._current_media_pool_folder(current_project)
+        media_pool = self._media_pool(current_project)
+        if current_folder is None or media_pool is None:
+            return self._failure(
+                command["request_id"],
+                "object_not_found",
+                "Current media pool folder is not available.",
+            )
+
+        clip_infos = []
+        normalized = []
+        for placement in placements:
+            if not isinstance(placement, dict):
+                return self._failure(
+                    command["request_id"],
+                    "validation_error",
+                    "Each clip placement must be an object.",
+                )
+            clip_name = str(placement.get("clip_name") or "").strip()
+            if not clip_name:
+                return self._failure(
+                    command["request_id"],
+                    "validation_error",
+                    "Clip placement requires clip_name.",
+                )
+            clip, error = self._resolve_clip_by_name(current_folder, clip_name)
+            if error is not None:
+                return self._failure(
+                    command["request_id"],
+                    error["category"],
+                    error["message"],
+                    details=error.get("details"),
+                )
+            try:
+                record_frame = int(placement.get("record_frame"))
+                track_index = int(placement.get("track_index", 1))
+            except (TypeError, ValueError):
+                return self._failure(
+                    command["request_id"],
+                    "validation_error",
+                    "Clip placement requires integer record_frame and track_index.",
+                )
+            if track_index < 1:
+                return self._failure(
+                    command["request_id"],
+                    "validation_error",
+                    "Track index must be at least 1.",
+                )
+
+            media_type = placement.get("media_type", 1)
+            try:
+                media_type = int(media_type)
+            except (TypeError, ValueError):
+                return self._failure(
+                    command["request_id"],
+                    "validation_error",
+                    "Media type must be an integer when provided.",
+                )
+            if media_type not in (1, 2):
+                return self._failure(
+                    command["request_id"],
+                    "validation_error",
+                    "Media type must be 1 (video) or 2 (audio).",
+                )
+
+            clip_info = {
+                "mediaPoolItem": clip,
+                "recordFrame": record_frame,
+                "trackIndex": track_index,
+            }
+            start_frame = placement.get("start_frame")
+            end_frame = placement.get("end_frame")
+            if start_frame is not None:
+                try:
+                    clip_info["startFrame"] = int(start_frame)
+                except (TypeError, ValueError):
+                    return self._failure(
+                        command["request_id"],
+                        "validation_error",
+                        "Start frame must be an integer when provided.",
+                    )
+            if end_frame is not None:
+                try:
+                    clip_info["endFrame"] = int(end_frame)
+                except (TypeError, ValueError):
+                    return self._failure(
+                        command["request_id"],
+                        "validation_error",
+                        "End frame must be an integer when provided.",
+                    )
+            if (
+                "startFrame" in clip_info
+                and "endFrame" in clip_info
+                and clip_info["startFrame"] >= clip_info["endFrame"]
+            ):
+                return self._failure(
+                    command["request_id"],
+                    "validation_error",
+                    "End frame must be greater than start frame.",
+                )
+            clip_info["mediaType"] = media_type
+            clip_infos.append(clip_info)
+            normalized.append(
+                {
+                    "name": clip_name,
+                    "track_type": "audio" if media_type == 2 else "video",
+                    "track_index": track_index,
+                }
+            )
+
+        self._safe_call(current_project, "SetCurrentTimeline", timeline)
+        appended_items = self._safe_call(media_pool, "AppendToTimeline", clip_infos)
+        if not isinstance(appended_items, list) or len(appended_items) != len(clip_infos):
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve failed to place the requested clips.",
+            )
+
+        placed = []
+        for item, summary in zip(appended_items, normalized):
+            selector = self._timeline_item_selector(item)
+            placed.append(
+                {
+                    "item_index": selector.get("item_index"),
+                    "name": self._timeline_item_name(item) or summary["name"],
+                    "track_type": selector.get("track_type") or summary["track_type"],
+                    "track_index": selector.get("track_index") or summary["track_index"],
+                    "start_frame": self._timeline_item_frame(item, "GetStart"),
+                    "end_frame": self._timeline_item_frame(item, "GetEnd"),
+                }
+            )
+
+        return self._success(
+            command["request_id"],
+            data={
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(current_project, "GetName"),
+                },
+                "timeline": self._timeline_summary(current_project, timeline),
+                "placed_count": len(placed),
+                "items": placed,
+            },
+        )
+
     def _handle_timeline_create_from_clips(self, command, resolve):
         current_project = self._current_project(resolve)
         if current_project is None:
@@ -1230,6 +1410,79 @@ class ResolveCommandCore(object):
                 "item_count": len(items),
                 "start_frame": start_frame,
                 "end_frame": end_frame,
+            },
+        )
+
+    def _handle_timeline_item_inspect(self, command, resolve):
+        item_data, failure = self._resolve_timeline_item(command, resolve)
+        if failure is not None:
+            return failure
+
+        current_project = item_data["project"]
+        timeline = item_data["timeline"]
+        item = item_data["item"]
+
+        return self._success(
+            command["request_id"],
+            data={
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(current_project, "GetName"),
+                },
+                "timeline": self._timeline_summary(current_project, timeline),
+                "item": {
+                    "item_index": item_data["item_index"],
+                    "name": self._timeline_item_name(item) or "Timeline Item",
+                    "track_type": item_data["track_type"],
+                    "track_index": item_data["track_index"],
+                    "start_frame": self._timeline_item_frame(item, "GetStart"),
+                    "end_frame": self._timeline_item_frame(item, "GetEnd"),
+                },
+                "duration": self._timeline_item_frame(item, "GetDuration"),
+                "source_start_frame": self._timeline_item_frame(item, "GetSourceStartFrame"),
+                "source_end_frame": self._timeline_item_frame(item, "GetSourceEndFrame"),
+                "left_offset": self._timeline_item_frame(item, "GetLeftOffset"),
+                "right_offset": self._timeline_item_frame(item, "GetRightOffset"),
+            },
+        )
+
+    def _handle_timeline_item_delete(self, command, resolve):
+        item_data, failure = self._resolve_timeline_item(command, resolve)
+        if failure is not None:
+            return failure
+
+        current_project = item_data["project"]
+        timeline = item_data["timeline"]
+        item = item_data["item"]
+        ripple = bool(command["payload"].get("ripple", False))
+        item_summary = {
+            "item_index": item_data["item_index"],
+            "name": self._timeline_item_name(item) or "Timeline Item",
+            "track_type": item_data["track_type"],
+            "track_index": item_data["track_index"],
+            "start_frame": self._timeline_item_frame(item, "GetStart"),
+            "end_frame": self._timeline_item_frame(item, "GetEnd"),
+        }
+
+        deleted = bool(self._safe_call(timeline, "DeleteClips", [item], ripple))
+        if not deleted:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve failed to delete the requested timeline item.",
+            )
+
+        return self._success(
+            command["request_id"],
+            data={
+                "deleted": True,
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(current_project, "GetName"),
+                },
+                "timeline": self._timeline_summary(current_project, timeline),
+                "item": item_summary,
+                "ripple": ripple,
             },
         )
 
@@ -1977,6 +2230,19 @@ class ResolveCommandCore(object):
         except (TypeError, ValueError):
             return None
 
+    def _timeline_item_selector(self, item):
+        track_data = self._safe_call(item, "GetTrackTypeAndIndex")
+        if isinstance(track_data, (list, tuple)) and len(track_data) >= 2:
+            try:
+                return {
+                    "track_type": str(track_data[0]),
+                    "track_index": int(track_data[1]),
+                    "item_index": None,
+                }
+            except (TypeError, ValueError):
+                pass
+        return {"track_type": None, "track_index": None, "item_index": None}
+
     def _timeline_track_counts(self, timeline, track_type):
         track_count = self._safe_call(timeline, "GetTrackCount", track_type) or 0
         item_count = 0
@@ -2056,6 +2322,46 @@ class ResolveCommandCore(object):
             "track_type": track_type,
             "track_index": track_index,
             "items": items,
+        }, None
+
+    def _resolve_timeline_item(self, command, resolve):
+        track_data, failure = self._resolve_track_payload(command, resolve)
+        if failure is not None:
+            return None, failure
+
+        try:
+            item_index = int(command["payload"].get("item_index"))
+        except (TypeError, ValueError):
+            return None, self._failure(
+                command["request_id"],
+                "validation_error",
+                "Item index must be an integer.",
+            )
+        if item_index < 0:
+            return None, self._failure(
+                command["request_id"],
+                "validation_error",
+                "Item index must be zero or greater.",
+            )
+        if item_index >= len(track_data["items"]):
+            return None, self._failure(
+                command["request_id"],
+                "object_not_found",
+                "Timeline item %s was not found on track %s %s."
+                % (item_index, track_data["track_type"], track_data["track_index"]),
+                details={
+                    "track_type": track_data["track_type"],
+                    "track_index": track_data["track_index"],
+                    "item_index": item_index,
+                },
+            )
+        return {
+            "project": track_data["project"],
+            "timeline": track_data["timeline"],
+            "track_type": track_data["track_type"],
+            "track_index": track_data["track_index"],
+            "item_index": item_index,
+            "item": track_data["items"][item_index],
         }, None
 
     def _timeline_markers(self, timeline):

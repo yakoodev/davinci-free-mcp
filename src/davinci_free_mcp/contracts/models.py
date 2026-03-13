@@ -327,6 +327,50 @@ class ResolveTimelineListData(BaseModel):
     timelines: list[ResolveTimelineSummary] = Field(default_factory=list)
 
 
+class ResolveTimelineClipPlacement(BaseModel):
+    clip_name: str
+    record_frame: int
+    track_index: int = 1
+    media_type: int = 1
+    start_frame: int | None = None
+    end_frame: int | None = None
+
+
+class ResolveTimelinePlacedItemData(BaseModel):
+    item_index: int | None = None
+    name: str
+    track_type: str
+    track_index: int
+    start_frame: int | None = None
+    end_frame: int | None = None
+
+
+class ResolveTimelineClipsPlaceData(BaseModel):
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    placed_count: int
+    items: list[ResolveTimelinePlacedItemData] = Field(default_factory=list)
+
+
+class ResolveTimelineItemInspectData(BaseModel):
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    item: ResolveTimelinePlacedItemData
+    duration: int | None = None
+    source_start_frame: int | None = None
+    source_end_frame: int | None = None
+    left_offset: int | None = None
+    right_offset: int | None = None
+
+
+class ResolveTimelineItemDeleteData(BaseModel):
+    deleted: bool
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    item: ResolveTimelinePlacedItemData
+    ripple: bool = False
+
+
 class ToolResultEnvelope(BaseModel):
     """Backend-friendly result for tools."""
 

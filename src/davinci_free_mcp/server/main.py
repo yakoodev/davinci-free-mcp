@@ -205,6 +205,20 @@ def create_server(
         ).model_dump(mode="json")
 
     @server.tool()
+    def timeline_clips_place(
+        placements: list[dict[str, object]],
+        timeline_name: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Place one or more media-pool clips into the target or current timeline with explicit timing."""
+
+        return backend_service.timeline_clips_place(
+            placements,
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
     def timeline_create_from_clips(
         name: str,
         clip_names: list[str],
@@ -270,6 +284,44 @@ def create_server(
         return backend_service.timeline_track_inspect(
             track_type,
             track_index,
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def timeline_item_inspect(
+        track_type: str,
+        track_index: int,
+        item_index: int,
+        timeline_name: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Inspect one timeline item by track and item index."""
+
+        return backend_service.timeline_item_inspect(
+            track_type,
+            track_index,
+            item_index,
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def timeline_item_delete(
+        track_type: str,
+        track_index: int,
+        item_index: int,
+        ripple: bool = False,
+        timeline_name: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Delete one timeline item by track and item index, with optional ripple delete."""
+
+        return backend_service.timeline_item_delete(
+            track_type,
+            track_index,
+            item_index,
+            ripple=ripple,
             timeline_name=timeline_name,
             timeout_ms=timeout_ms,
         ).model_dump(mode="json")

@@ -28,8 +28,12 @@ from davinci_free_mcp.contracts import (
     ResolveProjectListData,
     ResolveProjectOpenData,
     ResolveTimelineAppendClipsData,
+    ResolveTimelineClipsPlaceData,
+    ResolveTimelineItemDeleteData,
+    ResolveTimelineItemInspectData,
     ResolveTimelineCreateEmptyData,
     ResolveTimelineCreateFromClipsData,
+    ResolveTimelinePlacedItemData,
     ResolveTimelineCurrentData,
     ResolveTimelineInspectData,
     ResolveTimelineItemsListData,
@@ -226,6 +230,20 @@ class ResolveBackendService:
             timeout_ms=timeout_ms,
         )
 
+    def timeline_clips_place(
+        self,
+        placements: list[dict[str, object]],
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_clips_place",
+            ResolveTimelineClipsPlaceData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={"placements": placements},
+            timeout_ms=timeout_ms,
+        )
+
     def timeline_create_from_clips(
         self,
         name: str,
@@ -278,6 +296,48 @@ class ResolveBackendService:
             ResolveTimelineTrackInspectData,
             target={"timeline": timeline_name} if timeline_name else {},
             payload={"track_type": track_type, "track_index": track_index},
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_item_inspect(
+        self,
+        track_type: str,
+        track_index: int,
+        item_index: int,
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_item_inspect",
+            ResolveTimelineItemInspectData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={
+                "track_type": track_type,
+                "track_index": track_index,
+                "item_index": item_index,
+            },
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_item_delete(
+        self,
+        track_type: str,
+        track_index: int,
+        item_index: int,
+        ripple: bool = False,
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_item_delete",
+            ResolveTimelineItemDeleteData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={
+                "track_type": track_type,
+                "track_index": track_index,
+                "item_index": item_index,
+                "ripple": ripple,
+            },
             timeout_ms=timeout_ms,
         )
 

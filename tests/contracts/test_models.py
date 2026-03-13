@@ -6,7 +6,10 @@ from davinci_free_mcp.contracts import (
     ResolveMediaClipInspectPathData,
     ResolveMediaPoolFolderRecursiveData,
     ResolveMediaPoolFolderStateData,
+    ResolveTimelineClipsPlaceData,
     ResolveTimelineInspectData,
+    ResolveTimelineItemDeleteData,
+    ResolveTimelineItemInspectData,
     ResolveTimelineTrackInspectData,
     ResolveTimelineTrackItemsData,
 )
@@ -183,3 +186,79 @@ def test_marker_range_list_data_round_trip() -> None:
 
     assert restored.frame_from == 10
     assert restored.markers[0].frame == 12
+
+
+def test_timeline_item_inspect_data_round_trip() -> None:
+    payload = ResolveTimelineItemInspectData.model_validate(
+        {
+            "project": {"open": True, "name": "Demo Project"},
+            "timeline": {"index": 1, "name": "Assembly"},
+            "item": {
+                "item_index": 0,
+                "name": "clip001.mov",
+                "track_type": "video",
+                "track_index": 1,
+                "start_frame": 100,
+                "end_frame": 124,
+            },
+            "duration": 24,
+            "source_start_frame": 0,
+            "source_end_frame": 24,
+            "left_offset": 0,
+            "right_offset": 0,
+        }
+    )
+
+    restored = ResolveTimelineItemInspectData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.item.name == "clip001.mov"
+    assert restored.duration == 24
+
+
+def test_timeline_clips_place_data_round_trip() -> None:
+    payload = ResolveTimelineClipsPlaceData.model_validate(
+        {
+            "project": {"open": True, "name": "Demo Project"},
+            "timeline": {"index": 1, "name": "Assembly"},
+            "placed_count": 1,
+            "items": [
+                {
+                    "item_index": 0,
+                    "name": "clip001.mov",
+                    "track_type": "video",
+                    "track_index": 1,
+                    "start_frame": 100,
+                    "end_frame": 124,
+                }
+            ],
+        }
+    )
+
+    restored = ResolveTimelineClipsPlaceData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.placed_count == 1
+    assert restored.items[0].track_type == "video"
+
+
+def test_timeline_item_delete_data_round_trip() -> None:
+    payload = ResolveTimelineItemDeleteData.model_validate(
+        {
+            "deleted": True,
+            "project": {"open": True, "name": "Demo Project"},
+            "timeline": {"index": 1, "name": "Assembly"},
+            "item": {
+                "item_index": 0,
+                "name": "clip001.mov",
+                "track_type": "video",
+                "track_index": 1,
+                "start_frame": 100,
+                "end_frame": 124,
+            },
+            "ripple": False,
+        }
+    )
+
+    restored = ResolveTimelineItemDeleteData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.deleted is True
+    assert restored.item.item_index == 0

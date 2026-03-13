@@ -25,11 +25,25 @@ class FakeMediaPoolItem:
 
 
 class FakeTimelineItem:
-    def __init__(self, name: str, start_frame: int, end_frame: int) -> None:
+    def __init__(
+        self,
+        name: str,
+        start_frame: int,
+        end_frame: int,
+        *,
+        source_start_frame: int = 0,
+        source_end_frame: int | None = None,
+        left_offset: int = 0,
+        right_offset: int = 0,
+    ) -> None:
         self._name = name
         self._start_frame = start_frame
         self._end_frame = end_frame
         self._media_pool_item = FakeMediaPoolItem(name)
+        self._source_start_frame = source_start_frame
+        self._source_end_frame = end_frame if source_end_frame is None else source_end_frame
+        self._left_offset = left_offset
+        self._right_offset = right_offset
 
     def GetName(self) -> str:
         return self._name
@@ -40,8 +54,31 @@ class FakeTimelineItem:
     def GetEnd(self) -> int:
         return self._end_frame
 
+    def GetDuration(self, subframe_precision: bool = False) -> int:
+        return self._end_frame - self._start_frame
+
+    def GetSourceStartFrame(self) -> int:
+        return self._source_start_frame
+
+    def GetSourceEndFrame(self) -> int:
+        return self._source_end_frame
+
+    def GetLeftOffset(self, subframe_precision: bool = False) -> int:
+        return self._left_offset
+
+    def GetRightOffset(self, subframe_precision: bool = False) -> int:
+        return self._right_offset
+
+    def GetTrackTypeAndIndex(self) -> list[object]:
+        return [getattr(self, "_track_type", "video"), getattr(self, "_track_index", 1)]
+
     def GetMediaPoolItem(self) -> FakeMediaPoolItem:
         return self._media_pool_item
+
+    def invalidate(self) -> None:
+        self._name = ""
+        self._start_frame = None
+        self._end_frame = None
 
 
 class FakeTimeline:
@@ -86,6 +123,47 @@ class FakeTimeline:
             )
             start_frame = end_frame
         return True
+
+    def append_clip_infos(self, clip_infos: list[dict[str, object]]) -> list[FakeTimelineItem]:
+        appended: list[FakeTimelineItem] = []
+        for clip_info in clip_infos:
+            clip = clip_info["mediaPoolItem"]
+            record_frame = int(clip_info.get("recordFrame", 0))
+            track_index = int(clip_info.get("trackIndex", 1))
+            media_type = int(clip_info.get("mediaType", 1))
+            start_frame = int(clip_info.get("startFrame", 0))
+            end_frame = int(clip_info.get("endFrame", start_frame + 100))
+            track_type = "audio" if media_type == 2 else "video"
+
+            while len(self._tracks[track_type]) < track_index:
+                self._tracks[track_type].append([])
+
+            item = FakeTimelineItem(
+                clip.GetName(),
+                record_frame,
+                record_frame + max(1, end_frame - start_frame),
+                source_start_frame=start_frame,
+                source_end_frame=end_frame,
+            )
+            item._track_type = track_type
+            item._track_index = track_index
+            self._tracks[track_type][track_index - 1].append(item)
+            self._tracks[track_type][track_index - 1].sort(key=lambda value: value.GetStart())
+            appended.append(item)
+        return appended
+
+    def DeleteClips(self, timeline_items: list[FakeTimelineItem], ripple: bool = False) -> bool:
+        deleted = False
+        for track_type in ("video", "audio"):
+            for index, track_items in enumerate(self._tracks[track_type]):
+                removed = [item for item in track_items if item in timeline_items]
+                kept = [item for item in track_items if item not in timeline_items]
+                if len(kept) != len(track_items):
+                    for item in removed:
+                        item.invalidate()
+                    self._tracks[track_type][index] = kept
+                    deleted = True
+        return deleted
 
     def AddMarker(
         self,
@@ -193,10 +271,12 @@ class FakeMediaPool:
             imported.append(clip)
         return imported
 
-    def AppendToTimeline(self, clips: list[FakeMediaPoolItem]) -> bool:
+    def AppendToTimeline(self, clips: list[object]) -> object:
         timeline = self._project.GetCurrentTimeline()
         if timeline is None:
-            return False
+            return []
+        if clips and isinstance(clips[0], dict):
+            return timeline.append_clip_infos(clips)
         return timeline.append_items(clips)
 
 
@@ -1035,6 +1115,135 @@ def test_timeline_track_inspect_returns_not_found_for_missing_track(tmp_path: Pa
     assert result.success is False
     assert result.error is not None
     assert result.error.category == "object_not_found"
+
+
+def test_timeline_clips_place_places_subclip_on_requested_track(tmp_path: Path) -> None:
+    timeline = FakeTimeline("Assembly", video_tracks=[[]])
+    project = build_project(
+        timelines=[timeline],
+        current_timeline=timeline,
+        clip_names=["clip001.mov", "clip002.mov"],
+    )
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_clips_place",
+        [
+            {
+                "clip_name": "clip001.mov",
+                "record_frame": 100,
+                "track_index": 1,
+                "start_frame": 0,
+                "end_frame": 24,
+            },
+            {
+                "clip_name": "clip002.mov",
+                "record_frame": 200,
+                "track_index": 2,
+                "start_frame": 10,
+                "end_frame": 40,
+            },
+        ],
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "project": {"open": True, "name": "Demo Project"},
+        "timeline": {"index": 1, "name": "Assembly"},
+        "placed_count": 2,
+        "items": [
+            {
+                "item_index": None,
+                "name": "clip001.mov",
+                "track_type": "video",
+                "track_index": 1,
+                "start_frame": 100,
+                "end_frame": 124,
+            },
+            {
+                "item_index": None,
+                "name": "clip002.mov",
+                "track_type": "video",
+                "track_index": 2,
+                "start_frame": 200,
+                "end_frame": 230,
+            },
+        ],
+    }
+
+
+def test_timeline_item_inspect_returns_clip_timing_details(tmp_path: Path) -> None:
+    timeline = FakeTimeline("Assembly", video_tracks=[[FakeTimelineItem("clip001.mov", 100, 124)]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+    timeline._tracks["video"][0][0]._track_type = "video"
+    timeline._tracks["video"][0][0]._track_index = 1
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_inspect",
+        "video",
+        1,
+        0,
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "project": {"open": True, "name": "Demo Project"},
+        "timeline": {"index": 1, "name": "Assembly"},
+        "item": {
+            "item_index": 0,
+            "name": "clip001.mov",
+            "track_type": "video",
+            "track_index": 1,
+            "start_frame": 100,
+            "end_frame": 124,
+        },
+        "duration": 24,
+        "source_start_frame": 0,
+        "source_end_frame": 124,
+        "left_offset": 0,
+        "right_offset": 0,
+    }
+
+
+def test_timeline_item_delete_removes_selected_item(tmp_path: Path) -> None:
+    first = FakeTimelineItem("clip001.mov", 100, 124)
+    second = FakeTimelineItem("clip002.mov", 200, 224)
+    first._track_type = "video"
+    first._track_index = 1
+    second._track_type = "video"
+    second._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[first, second]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_delete",
+        "video",
+        1,
+        0,
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "deleted": True,
+        "project": {"open": True, "name": "Demo Project"},
+        "timeline": {"index": 1, "name": "Assembly"},
+        "item": {
+            "item_index": 0,
+            "name": "clip001.mov",
+            "track_type": "video",
+            "track_index": 1,
+            "start_frame": 100,
+            "end_frame": 124,
+        },
+        "ripple": False,
+    }
+    assert len(timeline.GetItemListInTrack("video", 1)) == 1
+    assert timeline.GetItemListInTrack("video", 1)[0].GetName() == "clip002.mov"
 
 
 def test_marker_add_adds_marker_to_current_timeline(tmp_path: Path) -> None:
