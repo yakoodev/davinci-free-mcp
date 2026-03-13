@@ -4,12 +4,20 @@
 
 ## Unreleased
 
-- Добавлены `project_manager_folder_list`, `project_manager_folder_open`, `project_manager_folder_up`, `project_manager_folder_path`.
-- Расширен low-level project-manager navigation с breadcrumb/path и списком дочерних folders/projects.
-- Добавлен `timeline_item_move` для low-level перемещения timeline clip через `copy+delete`.
-- Закрыт clip-oriented workflow для переноса item между позициями и треками с явной диагностикой неатомарных сбоев.
+- Пока нет незарелизенных записей.
 
 ## История изменений
+
+### d05c03d - Add timeline item move tool
+
+- Добавлен `timeline_item_move` для low-level перемещения timeline clip через `copy+delete`.
+- Закрыт clip-oriented workflow для переноса item между позициями и треками с явной диагностикой неатомарных сбоев.
+- Добавлен live-safe fallback для Resolve cases, где `GetSourceStartFrame/GetSourceEndFrame` возвращают `0/0` для полного clip range.
+
+### 76254be - Add project manager folder navigation tools
+
+- Добавлены `project_manager_folder_list`, `project_manager_folder_open`, `project_manager_folder_up`, `project_manager_folder_path`.
+- Расширен low-level project-manager navigation с breadcrumb/path и списком дочерних folders/projects.
 
 ### 4cad928 - Create missing tracks before clip placement
 
