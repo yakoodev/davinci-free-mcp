@@ -371,7 +371,7 @@ def create_server(
         timeline_name: str | None = None,
         timeout_ms: int = 5000,
     ) -> dict[str, object]:
-        """Place one or more media-pool clips into the target or current timeline with explicit timing."""
+        """Place clips by `clip_name` or `media_pool_path` into the target or current timeline."""
 
         return backend_service.timeline_clips_place(
             placements,
@@ -522,6 +522,114 @@ def create_server(
             target_track_type=target_track_type,
             target_track_index=target_track_index,
             timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def timeline_item_split(
+        track_type: str,
+        track_index: int,
+        item_index: int,
+        record_frame: int,
+        timeline_name: str | None = None,
+        add_marker: bool = True,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Split one timeline item at a record frame on the target or current timeline."""
+
+        return backend_service.timeline_item_split(
+            track_type,
+            track_index,
+            item_index,
+            record_frame,
+            timeline_name=timeline_name,
+            add_marker=add_marker,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def timeline_item_set_source_range(
+        track_type: str,
+        track_index: int,
+        item_index: int,
+        source_start_frame: int,
+        source_end_frame: int,
+        timeline_name: str | None = None,
+        add_marker: bool = True,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Replace one timeline item with the same placement but a different source range."""
+
+        return backend_service.timeline_item_set_source_range(
+            track_type,
+            track_index,
+            item_index,
+            source_start_frame,
+            source_end_frame,
+            timeline_name=timeline_name,
+            add_marker=add_marker,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def timeline_gap_close(
+        track_type: str,
+        track_index: int,
+        frame_from: int,
+        frame_to: int | None = None,
+        timeline_name: str | None = None,
+        add_marker: bool = True,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Close one gap on the requested track with ripple movement of later items."""
+
+        return backend_service.timeline_gap_close(
+            track_type,
+            track_index,
+            frame_from,
+            frame_to=frame_to,
+            timeline_name=timeline_name,
+            add_marker=add_marker,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def timeline_remove_gaps(
+        track_type: str,
+        track_index: int,
+        timeline_name: str | None = None,
+        add_marker: bool = True,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Compact one track by removing all internal gaps."""
+
+        return backend_service.timeline_remove_gaps(
+            track_type,
+            track_index,
+            timeline_name=timeline_name,
+            add_marker=add_marker,
+            timeout_ms=timeout_ms,
+        ).model_dump(mode="json")
+
+    @server.tool()
+    def timeline_insert_gap(
+        track_type: str,
+        track_index: int,
+        at_frame: int,
+        duration: int,
+        timeline_name: str | None = None,
+        add_marker: bool = True,
+        timeout_ms: int = 5000,
+    ) -> dict[str, object]:
+        """Insert a gap on one track by shifting later items to the right."""
+
+        return backend_service.timeline_insert_gap(
+            track_type,
+            track_index,
+            at_frame,
+            duration,
+            timeline_name=timeline_name,
+            add_marker=add_marker,
             timeout_ms=timeout_ms,
         ).model_dump(mode="json")
 

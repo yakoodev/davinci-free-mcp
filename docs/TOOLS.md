@@ -383,6 +383,86 @@ Output contract:
 Preconditions:
 Project must be open, timeline must exist, clip names must resolve in the current media pool folder.
 
+### `timeline_clips_place`
+
+Purpose:
+Place one or more clips into the current or specified timeline with explicit record timing.
+
+Clip selector modes:
+
+- `clip_name`: resolves in the current media pool folder
+- `media_pool_path`: resolves by folder path, either absolute from the root media pool or relative from the current folder
+
+Selector precedence and compatibility:
+
+- when `media_pool_path` is a non-empty string, path-based resolution is used
+- otherwise the tool falls back to `clip_name`
+- this keeps the older `clip_name` workflow valid for clients that send an empty `media_pool_path`
+
+Minimum inputs:
+
+```json
+{
+  "placements": [
+    {
+      "clip_name": "clip001.mov",
+      "record_frame": 100,
+      "track_index": 1
+    }
+  ]
+}
+```
+
+Path-oriented example:
+
+```json
+{
+  "placements": [
+    {
+      "media_pool_path": "/Master/Shots/clip001.mov",
+      "record_frame": 100,
+      "track_index": 1,
+      "start_frame": 0,
+      "end_frame": 24
+    }
+  ]
+}
+```
+
+Path syntax:
+
+- absolute path from the root media pool: `"/Master/Shots/clip001.mov"`
+- relative path from the current folder: `"Shots/clip001.mov"`
+
+Output contract:
+
+```json
+{
+  "project": {
+    "open": true,
+    "name": "Demo Project"
+  },
+  "timeline": {
+    "name": "Assembly",
+    "index": 1
+  },
+  "placed_count": 1,
+  "items": [
+    {
+      "item_index": 0,
+      "name": "clip001.mov",
+      "track_type": "video",
+      "track_index": 1,
+      "start_frame": 100,
+      "end_frame": 124
+    }
+  ]
+}
+```
+
+Preconditions:
+Project must be open, timeline must exist, and each placement must provide either `clip_name` or `media_pool_path`.
+
 ### `timeline_create_from_clips`
 
 Purpose:

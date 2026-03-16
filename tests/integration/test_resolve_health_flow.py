@@ -91,6 +91,7 @@ class FakeTimeline:
         *,
         allow_implicit_track_create: bool = True,
         fail_delete: bool = False,
+        reject_overlaps: bool = False,
     ) -> None:
         self._name = name
         self._tracks = {
@@ -100,6 +101,7 @@ class FakeTimeline:
         self._markers: dict[int, dict[str, object]] = {}
         self._allow_implicit_track_create = allow_implicit_track_create
         self._fail_delete = fail_delete
+        self._reject_overlaps = reject_overlaps
 
     def GetName(self) -> str:
         return self._name
@@ -146,10 +148,20 @@ class FakeTimeline:
             while len(self._tracks[track_type]) < track_index:
                 self._tracks[track_type].append([])
 
+            target_end = record_frame + max(1, end_frame - start_frame)
+            if self._reject_overlaps:
+                for existing in self._tracks[track_type][track_index - 1]:
+                    existing_start = existing.GetStart()
+                    existing_end = existing.GetEnd()
+                    if existing_start is None or existing_end is None:
+                        continue
+                    if record_frame < existing_end and target_end > existing_start:
+                        return []
+
             item = FakeTimelineItem(
                 clip.GetName(),
                 record_frame,
-                record_frame + max(1, end_frame - start_frame),
+                target_end,
                 source_start_frame=start_frame,
                 source_end_frame=end_frame,
             )
@@ -1696,6 +1708,435 @@ def test_timeline_item_move_reports_non_atomic_failure_when_delete_fails(tmp_pat
     assert result.error.category == "execution_failure"
     assert result.error.details["move_completed"] is False
     assert len(timeline.GetItemListInTrack("video", 1)) == 2
+
+
+def test_timeline_clips_place_resolves_media_pool_path(tmp_path: Path) -> None:
+    shots_folder = FakeMediaPoolFolder("Shots", clips=[FakeMediaPoolItem("clip001.mov")])
+    media_root = FakeMediaPoolFolder("Master", subfolders=[shots_folder], clips=[])
+    timeline = FakeTimeline("Assembly", video_tracks=[[]])
+    project = build_project(
+        timelines=[timeline],
+        current_timeline=timeline,
+        media_pool_folder=media_root,
+    )
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_clips_place",
+        [
+            {
+                "media_pool_path": "/Master/Shots/clip001.mov",
+                "record_frame": 50,
+                "track_index": 1,
+                "start_frame": 0,
+                "end_frame": 24,
+            }
+        ],
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert result.data["items"][0]["name"] == "clip001.mov"
+    assert timeline.GetItemListInTrack("video", 1)[0].GetStart() == 50
+
+
+def test_timeline_clips_place_falls_back_to_clip_name_when_media_pool_path_is_empty(tmp_path: Path) -> None:
+    media_root = FakeMediaPoolFolder("Master", clips=[FakeMediaPoolItem("clip001.mov")])
+    timeline = FakeTimeline("Assembly", video_tracks=[[]])
+    project = build_project(
+        timelines=[timeline],
+        current_timeline=timeline,
+        media_pool_folder=media_root,
+    )
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_clips_place",
+        [
+            {
+                "clip_name": "clip001.mov",
+                "media_pool_path": "",
+                "record_frame": 25,
+                "track_index": 1,
+            }
+        ],
+    )
+
+    assert result.success is True
+    assert timeline.GetItemListInTrack("video", 1)[0].GetStart() == 25
+
+
+def test_timeline_clips_place_falls_back_to_clip_name_when_media_pool_path_is_whitespace(tmp_path: Path) -> None:
+    media_root = FakeMediaPoolFolder("Master", clips=[FakeMediaPoolItem("clip001.mov")])
+    timeline = FakeTimeline("Assembly", video_tracks=[[]])
+    project = build_project(
+        timelines=[timeline],
+        current_timeline=timeline,
+        media_pool_folder=media_root,
+    )
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_clips_place",
+        [
+            {
+                "clip_name": "clip001.mov",
+                "media_pool_path": "   ",
+                "record_frame": 25,
+                "track_index": 1,
+            }
+        ],
+    )
+
+    assert result.success is True
+    assert timeline.GetItemListInTrack("video", 1)[0].GetStart() == 25
+
+
+def test_timeline_clips_place_rejects_missing_clip_selector(tmp_path: Path) -> None:
+    media_root = FakeMediaPoolFolder("Master", clips=[FakeMediaPoolItem("clip001.mov")])
+    timeline = FakeTimeline("Assembly", video_tracks=[[]])
+    project = build_project(
+        timelines=[timeline],
+        current_timeline=timeline,
+        media_pool_folder=media_root,
+    )
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_clips_place",
+        [
+            {
+                "clip_name": " ",
+                "media_pool_path": "   ",
+                "record_frame": 25,
+                "track_index": 1,
+            }
+        ],
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
+def test_timeline_item_split_splits_item_and_adds_marker(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 160, source_start_frame=10, source_end_frame=70)
+    item._track_type = "video"
+    item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_split",
+        "video",
+        1,
+        0,
+        130,
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "split_frame": 130,
+        "project": {"open": True, "name": "Demo Project"},
+        "timeline": {"index": 1, "name": "Assembly"},
+        "left_item": {
+            "item_index": 0,
+            "name": "clip001.mov",
+            "track_type": "video",
+            "track_index": 1,
+            "start_frame": 100,
+            "end_frame": 130,
+        },
+        "right_item": {
+            "item_index": 1,
+            "name": "clip001.mov",
+            "track_type": "video",
+            "track_index": 1,
+            "start_frame": 130,
+            "end_frame": 160,
+        },
+        "marker": {
+            "frame": 130,
+            "color": "Blue",
+            "name": "Split",
+            "note": None,
+            "duration": 1,
+            "custom_data": "",
+        },
+    }
+    assert timeline.marker_at(130)["name"] == "Split"
+
+
+def test_timeline_item_split_rejects_edge_frame(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 160, source_start_frame=10, source_end_frame=70)
+    item._track_type = "video"
+    item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_split",
+        "video",
+        1,
+        0,
+        100,
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
+def test_timeline_item_set_source_range_recreates_item_and_adds_marker(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 124, source_start_frame=0, source_end_frame=24)
+    item._track_type = "video"
+    item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_set_source_range",
+        "video",
+        1,
+        0,
+        10,
+        40,
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "updated": True,
+        "project": {"open": True, "name": "Demo Project"},
+        "timeline": {"index": 1, "name": "Assembly"},
+        "source_item": {
+            "item_index": 0,
+            "name": "clip001.mov",
+            "track_type": "video",
+            "track_index": 1,
+            "start_frame": 100,
+            "end_frame": 124,
+        },
+        "item": {
+            "item_index": 0,
+            "name": "clip001.mov",
+            "track_type": "video",
+            "track_index": 1,
+            "start_frame": 100,
+            "end_frame": 130,
+        },
+        "marker": {
+            "frame": 100,
+            "color": "Blue",
+            "name": "Trim",
+            "note": None,
+            "duration": 1,
+            "custom_data": "",
+        },
+    }
+    assert timeline.marker_at(100)["name"] == "Trim"
+
+
+def test_timeline_item_set_source_range_validates_range(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 124, source_start_frame=0, source_end_frame=24)
+    item._track_type = "video"
+    item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_set_source_range",
+        "video",
+        1,
+        0,
+        40,
+        10,
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
+def test_timeline_insert_gap_shifts_following_items(tmp_path: Path) -> None:
+    first = FakeTimelineItem("clip001.mov", 0, 50, source_start_frame=0, source_end_frame=50)
+    second = FakeTimelineItem("clip002.mov", 100, 150, source_start_frame=0, source_end_frame=50)
+    first._track_type = "video"
+    first._track_index = 1
+    second._track_type = "video"
+    second._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[first, second]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_insert_gap",
+        "video",
+        1,
+        50,
+        20,
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert result.data["shifted_item_count"] == 1
+    assert timeline.GetItemListInTrack("video", 1)[1].GetStart() == 120
+    assert timeline.marker_at(50)["name"] == "Insert Gap"
+
+
+def test_timeline_gap_close_shifts_later_items_left(tmp_path: Path) -> None:
+    first = FakeTimelineItem("clip001.mov", 0, 50, source_start_frame=0, source_end_frame=50)
+    second = FakeTimelineItem("clip002.mov", 80, 120, source_start_frame=0, source_end_frame=40)
+    first._track_type = "video"
+    first._track_index = 1
+    second._track_type = "video"
+    second._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[first, second]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_gap_close",
+        "video",
+        1,
+        50,
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert result.data["frame_from"] == 50
+    assert result.data["frame_to"] == 80
+    assert result.data["shifted_item_count"] == 1
+    assert timeline.GetItemListInTrack("video", 1)[1].GetStart() == 50
+    assert timeline.marker_at(50)["name"] == "Gap Close"
+
+
+def test_timeline_gap_close_supports_partial_gap_close(tmp_path: Path) -> None:
+    first = FakeTimelineItem("clip001.mov", 0, 50, source_start_frame=0, source_end_frame=50)
+    second = FakeTimelineItem("clip002.mov", 80, 120, source_start_frame=0, source_end_frame=40)
+    third = FakeTimelineItem("clip003.mov", 140, 170, source_start_frame=0, source_end_frame=30)
+    for item in (first, second, third):
+        item._track_type = "video"
+        item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[first, second, third]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_gap_close",
+        "video",
+        1,
+        60,
+        80,
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert result.data["frame_from"] == 60
+    assert result.data["frame_to"] == 80
+    starts = [item.GetStart() for item in timeline.GetItemListInTrack("video", 1)]
+    assert starts == [0, 60, 120]
+
+
+def test_timeline_remove_gaps_compacts_track_and_can_skip_marker(tmp_path: Path) -> None:
+    first = FakeTimelineItem("clip001.mov", 0, 50, source_start_frame=0, source_end_frame=50)
+    second = FakeTimelineItem("clip002.mov", 80, 100, source_start_frame=0, source_end_frame=20)
+    third = FakeTimelineItem("clip003.mov", 150, 180, source_start_frame=0, source_end_frame=30)
+    for item in (first, second, third):
+        item._track_type = "video"
+        item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[first, second, third]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_remove_gaps",
+        "video",
+        1,
+        add_marker=False,
+    )
+
+    assert result.success is True
+    assert result.data == {
+        "removed_gap_count": 2,
+        "shifted_item_count": 2,
+        "project": {"open": True, "name": "Demo Project"},
+        "timeline": {"index": 1, "name": "Assembly"},
+        "track_type": "video",
+        "track_index": 1,
+        "marker": None,
+    }
+    starts = [item.GetStart() for item in timeline.GetItemListInTrack("video", 1)]
+    assert starts == [0, 50, 70]
+    assert timeline.GetMarkers() == {}
+
+
+def test_timeline_remove_gaps_avoids_temporary_overlaps_when_timeline_rejects_them(tmp_path: Path) -> None:
+    first = FakeTimelineItem("clip001.mov", 0, 50, source_start_frame=0, source_end_frame=50)
+    second = FakeTimelineItem("clip002.mov", 80, 100, source_start_frame=0, source_end_frame=20)
+    third = FakeTimelineItem("clip003.mov", 150, 180, source_start_frame=0, source_end_frame=30)
+    for item in (first, second, third):
+        item._track_type = "video"
+        item._track_index = 1
+    timeline = FakeTimeline(
+        "Assembly",
+        video_tracks=[[first, second, third]],
+        reject_overlaps=True,
+    )
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_remove_gaps",
+        "video",
+        1,
+        add_marker=False,
+    )
+
+    assert result.success is True
+    starts = [item.GetStart() for item in timeline.GetItemListInTrack("video", 1)]
+    assert starts == [0, 50, 70]
+
+
+def test_timeline_gap_close_rejects_range_with_item_overlap(tmp_path: Path) -> None:
+    first = FakeTimelineItem("clip001.mov", 0, 50, source_start_frame=0, source_end_frame=50)
+    second = FakeTimelineItem("clip002.mov", 80, 120, source_start_frame=0, source_end_frame=40)
+    first._track_type = "video"
+    first._track_index = 1
+    second._track_type = "video"
+    second._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[first, second]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_gap_close",
+        "video",
+        1,
+        50,
+        90,
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
 
 
 def test_marker_add_adds_marker_to_current_timeline(tmp_path: Path) -> None:

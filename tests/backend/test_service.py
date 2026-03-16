@@ -418,6 +418,161 @@ def test_timeline_item_move_normalizes_invalid_executor_payload() -> None:
     assert result.error.category == "execution_failure"
 
 
+def test_timeline_item_split_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "split_frame": 130,
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "left_item": {
+                        "item_index": 0,
+                        "name": "clip001.mov",
+                        "track_type": "video",
+                        "track_index": 1,
+                        "start_frame": 100,
+                        "end_frame": 130,
+                    },
+                    "right_item": {
+                        "item_index": 1,
+                        "name": "clip001.mov",
+                        "track_type": "video",
+                        "track_index": "bad",
+                        "start_frame": 130,
+                        "end_frame": 160,
+                    },
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.timeline_item_split("video", 1, 0, 130)
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
+def test_timeline_item_set_source_range_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "updated": True,
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "source_item": {
+                        "item_index": 0,
+                        "name": "clip001.mov",
+                        "track_type": "video",
+                        "track_index": 1,
+                        "start_frame": 100,
+                        "end_frame": 124,
+                    },
+                    "item": {
+                        "item_index": 0,
+                        "name": "clip001.mov",
+                        "track_type": "video",
+                        "track_index": 1,
+                        "start_frame": "bad",
+                        "end_frame": 130,
+                    },
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.timeline_item_set_source_range("video", 1, 0, 10, 40)
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
+def test_timeline_gap_close_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "closed": True,
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "track_type": "video",
+                    "track_index": 1,
+                    "frame_from": 50,
+                    "frame_to": 80,
+                    "shifted_item_count": "bad",
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.timeline_gap_close("video", 1, 50)
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
+def test_timeline_remove_gaps_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "removed_gap_count": 2,
+                    "shifted_item_count": 2,
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "track_type": "video",
+                    "track_index": "bad",
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.timeline_remove_gaps("video", 1)
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
+def test_timeline_insert_gap_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "inserted": True,
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "track_type": "video",
+                    "track_index": 1,
+                    "at_frame": 50,
+                    "duration": "bad",
+                    "shifted_item_count": 1,
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.timeline_insert_gap("video", 1, 50, 20)
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
 def test_audio_transcribe_segments_creates_sidecar_on_first_request(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

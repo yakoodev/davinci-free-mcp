@@ -54,6 +54,11 @@ class ResolveCommandCore(object):
             "timeline_item_inspect": self._handle_timeline_item_inspect,
             "timeline_item_delete": self._handle_timeline_item_delete,
             "timeline_item_move": self._handle_timeline_item_move,
+            "timeline_item_split": self._handle_timeline_item_split,
+            "timeline_item_set_source_range": self._handle_timeline_item_set_source_range,
+            "timeline_gap_close": self._handle_timeline_gap_close,
+            "timeline_remove_gaps": self._handle_timeline_remove_gaps,
+            "timeline_insert_gap": self._handle_timeline_insert_gap,
             "timeline_inspect": self._handle_timeline_inspect,
             "marker_add": self._handle_marker_add,
             "marker_list": self._handle_marker_list,
@@ -1110,6 +1115,7 @@ class ResolveCommandCore(object):
 
         current_folder = self._current_media_pool_folder(current_project)
         media_pool = self._media_pool(current_project)
+        root_folder = self._safe_call(media_pool, "GetRootFolder") if media_pool is not None else None
         if current_folder is None or media_pool is None:
             return self._failure(
                 command["request_id"],
@@ -1128,13 +1134,22 @@ class ResolveCommandCore(object):
                     "Each clip placement must be an object.",
                 )
             clip_name = str(placement.get("clip_name") or "").strip()
-            if not clip_name:
+            media_pool_path_value = placement.get("media_pool_path")
+            media_pool_path = str(media_pool_path_value or "").strip()
+            if not clip_name and not media_pool_path:
                 return self._failure(
                     command["request_id"],
                     "validation_error",
-                    "Clip placement requires clip_name.",
+                    "Clip placement requires clip_name or media_pool_path.",
                 )
-            clip, error = self._resolve_clip_by_name(current_folder, clip_name)
+            if media_pool_path:
+                clip, error = self._resolve_clip_by_media_pool_path(
+                    root_folder,
+                    current_folder,
+                    media_pool_path,
+                )
+            else:
+                clip, error = self._resolve_clip_by_name(current_folder, clip_name)
             if error is not None:
                 return self._failure(
                     command["request_id"],
@@ -1215,7 +1230,7 @@ class ResolveCommandCore(object):
             required_track_indexes[track_type] = max(required_track_indexes[track_type], track_index)
             normalized.append(
                 {
-                    "name": clip_name,
+                    "name": clip_name or self._clip_name(clip) or "Timeline Item",
                     "track_type": track_type,
                     "track_index": track_index,
                 }
@@ -1864,6 +1879,490 @@ class ResolveCommandCore(object):
                 "source_item": source_item_summary,
                 "item": moved_item_summary,
             },
+        )
+
+    def _handle_timeline_item_split(self, command, resolve):
+        item_data, failure = self._resolve_timeline_item(command, resolve)
+        if failure is not None:
+            return failure
+
+        try:
+            split_frame = int(command["payload"].get("record_frame"))
+        except (TypeError, ValueError):
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Record frame must be an integer.",
+            )
+
+        item = item_data["item"]
+        item_start = self._timeline_item_frame(item, "GetStart")
+        item_end = self._timeline_item_frame(item, "GetEnd")
+        if item_start is None or item_end is None:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Timeline item timing is unavailable.",
+            )
+        if split_frame <= item_start or split_frame >= item_end:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Split frame must be strictly inside the timeline item range.",
+                details={"record_frame": split_frame, "start_frame": item_start, "end_frame": item_end},
+            )
+
+        media_pool_item = self._safe_call(item, "GetMediaPoolItem")
+        if media_pool_item is None:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Timeline item cannot be split because its media pool item is unavailable.",
+            )
+
+        source_start_frame, source_end_frame, range_error = self._timeline_item_source_range(item)
+        if range_error is not None:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                range_error["message"],
+                details=range_error.get("details"),
+            )
+
+        split_offset = split_frame - item_start
+        left_end = source_start_frame + split_offset
+        right_start = left_end
+        current_project = item_data["project"]
+        timeline = item_data["timeline"]
+        media_pool = self._media_pool(current_project)
+        if media_pool is None:
+            return self._failure(
+                command["request_id"],
+                "object_not_found",
+                "Current media pool is not available.",
+            )
+
+        self._safe_call(current_project, "SetCurrentTimeline", timeline)
+        appended_items = self._safe_call(
+            media_pool,
+            "AppendToTimeline",
+            [
+                {
+                    "mediaPoolItem": media_pool_item,
+                    "startFrame": source_start_frame,
+                    "endFrame": left_end,
+                    "recordFrame": item_start,
+                    "trackIndex": item_data["track_index"],
+                    "mediaType": 2 if item_data["track_type"] == "audio" else 1,
+                },
+                {
+                    "mediaPoolItem": media_pool_item,
+                    "startFrame": right_start,
+                    "endFrame": source_end_frame,
+                    "recordFrame": split_frame,
+                    "trackIndex": item_data["track_index"],
+                    "mediaType": 2 if item_data["track_type"] == "audio" else 1,
+                },
+            ],
+        )
+        if not isinstance(appended_items, list) or len(appended_items) != 2:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve failed to split the requested timeline item.",
+            )
+
+        source_item_summary = self._timeline_item_summary(
+            item,
+            item_index=item_data["item_index"],
+            track_type=item_data["track_type"],
+            track_index=item_data["track_index"],
+        )
+        deleted = bool(self._safe_call(timeline, "DeleteClips", [item], False))
+        if not deleted:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve split the timeline item but failed to delete the source item.",
+                details={"source_item": source_item_summary},
+            )
+
+        marker, warnings = self._maybe_add_technical_marker(
+            timeline,
+            split_frame,
+            "Split",
+            command["payload"].get("add_marker", True),
+        )
+        left_item_summary = self._resolved_timeline_item_summary(
+            timeline,
+            appended_items[0],
+            item_data["track_type"],
+            item_data["track_index"],
+            fallback_name=source_item_summary["name"],
+        )
+        right_item_summary = self._resolved_timeline_item_summary(
+            timeline,
+            appended_items[1],
+            item_data["track_type"],
+            item_data["track_index"],
+            fallback_name=source_item_summary["name"],
+        )
+        return self._success(
+            command["request_id"],
+            data={
+                "split_frame": split_frame,
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(current_project, "GetName"),
+                },
+                "timeline": self._timeline_summary(current_project, timeline),
+                "left_item": left_item_summary,
+                "right_item": right_item_summary,
+                "marker": marker,
+            },
+            warnings=warnings,
+        )
+
+    def _handle_timeline_item_set_source_range(self, command, resolve):
+        item_data, failure = self._resolve_timeline_item(command, resolve)
+        if failure is not None:
+            return failure
+
+        try:
+            source_start_frame = int(command["payload"].get("source_start_frame"))
+            source_end_frame = int(command["payload"].get("source_end_frame"))
+        except (TypeError, ValueError):
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Source start and end frames must be integers.",
+            )
+        if source_end_frame <= source_start_frame:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Source end frame must be greater than source start frame.",
+            )
+
+        current_project = item_data["project"]
+        timeline = item_data["timeline"]
+        item = item_data["item"]
+        media_pool_item = self._safe_call(item, "GetMediaPoolItem")
+        if media_pool_item is None:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Timeline item cannot be updated because its media pool item is unavailable.",
+            )
+
+        item_start = self._timeline_item_frame(item, "GetStart")
+        if item_start is None:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Timeline item timing is unavailable.",
+            )
+
+        media_pool = self._media_pool(current_project)
+        if media_pool is None:
+            return self._failure(
+                command["request_id"],
+                "object_not_found",
+                "Current media pool is not available.",
+            )
+
+        source_item_summary = self._timeline_item_summary(
+            item,
+            item_index=item_data["item_index"],
+            track_type=item_data["track_type"],
+            track_index=item_data["track_index"],
+        )
+        self._safe_call(current_project, "SetCurrentTimeline", timeline)
+        appended_items = self._safe_call(
+            media_pool,
+            "AppendToTimeline",
+            [
+                {
+                    "mediaPoolItem": media_pool_item,
+                    "startFrame": source_start_frame,
+                    "endFrame": source_end_frame,
+                    "recordFrame": item_start,
+                    "trackIndex": item_data["track_index"],
+                    "mediaType": 2 if item_data["track_type"] == "audio" else 1,
+                }
+            ],
+        )
+        if not isinstance(appended_items, list) or len(appended_items) != 1:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve failed to update the timeline item source range.",
+            )
+
+        deleted = bool(self._safe_call(timeline, "DeleteClips", [item], False))
+        if not deleted:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve placed the updated timeline item but failed to delete the source item.",
+                details={"source_item": source_item_summary},
+            )
+
+        marker, warnings = self._maybe_add_technical_marker(
+            timeline,
+            item_start,
+            "Trim",
+            command["payload"].get("add_marker", True),
+        )
+        return self._success(
+            command["request_id"],
+            data={
+                "updated": True,
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(current_project, "GetName"),
+                },
+                "timeline": self._timeline_summary(current_project, timeline),
+                "source_item": source_item_summary,
+                "item": self._resolved_timeline_item_summary(
+                    timeline,
+                    appended_items[0],
+                    item_data["track_type"],
+                    item_data["track_index"],
+                    fallback_name=source_item_summary["name"],
+                ),
+                "marker": marker,
+            },
+            warnings=warnings,
+        )
+
+    def _handle_timeline_gap_close(self, command, resolve):
+        track_data, failure = self._resolve_track_payload(command, resolve)
+        if failure is not None:
+            return failure
+
+        try:
+            frame_from = int(command["payload"].get("frame_from"))
+        except (TypeError, ValueError):
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Gap start frame must be an integer.",
+            )
+
+        frame_to = command["payload"].get("frame_to")
+        try:
+            frame_to_value = int(frame_to) if frame_to is not None else None
+        except (TypeError, ValueError):
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Gap end frame must be an integer when provided.",
+            )
+        if frame_to_value is not None and frame_to_value <= frame_from:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Gap end frame must be greater than gap start frame.",
+            )
+
+        gap_data, gap_error = self._resolve_gap_range(
+            track_data["items"],
+            frame_from,
+            frame_to_value,
+        )
+        if gap_error is not None:
+            return self._failure(
+                command["request_id"],
+                gap_error["category"],
+                gap_error["message"],
+                details=gap_error.get("details"),
+            )
+
+        shifted_items = [
+            {"item": entry["item"], "record_frame": entry["item"].GetStart() - gap_data["duration"]}
+            for entry in gap_data["following_items"]
+        ]
+        shifted_count, shift_error = self._recreate_shifted_items(
+            track_data["project"],
+            track_data["timeline"],
+            shifted_items,
+        )
+        if shift_error is not None:
+            return self._failure(
+                command["request_id"],
+                shift_error["category"],
+                shift_error["message"],
+                details=shift_error.get("details"),
+            )
+
+        marker, warnings = self._maybe_add_technical_marker(
+            track_data["timeline"],
+            gap_data["frame_from"],
+            "Gap Close",
+            command["payload"].get("add_marker", True),
+        )
+        return self._success(
+            command["request_id"],
+            data={
+                "closed": True,
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(track_data["project"], "GetName"),
+                },
+                "timeline": self._timeline_summary(track_data["project"], track_data["timeline"]),
+                "track_type": track_data["track_type"],
+                "track_index": track_data["track_index"],
+                "frame_from": gap_data["frame_from"],
+                "frame_to": gap_data["frame_to"],
+                "shifted_item_count": shifted_count,
+                "marker": marker,
+            },
+            warnings=warnings,
+        )
+
+    def _handle_timeline_remove_gaps(self, command, resolve):
+        track_data, failure = self._resolve_track_payload(command, resolve)
+        if failure is not None:
+            return failure
+
+        items = track_data["items"]
+        if len(items) < 2:
+            return self._failure(
+                command["request_id"],
+                "object_not_found",
+                "No internal gaps were found on the requested track.",
+            )
+
+        sorted_entries = self._timeline_track_entries(items)
+        removed_gap_count = 0
+        shifted_items = []
+        current_end = sorted_entries[0]["end_frame"]
+        first_gap_start = None
+        for entry in sorted_entries[1:]:
+            if entry["start_frame"] > current_end:
+                removed_gap_count += 1
+                if first_gap_start is None:
+                    first_gap_start = current_end
+            target_start = current_end
+            if entry["start_frame"] != target_start:
+                shifted_items.append({"item": entry["item"], "record_frame": target_start})
+            current_end = target_start + (entry["end_frame"] - entry["start_frame"])
+
+        if removed_gap_count == 0:
+            return self._failure(
+                command["request_id"],
+                "object_not_found",
+                "No internal gaps were found on the requested track.",
+            )
+
+        shifted_count, shift_error = self._recreate_shifted_items(
+            track_data["project"],
+            track_data["timeline"],
+            shifted_items,
+        )
+        if shift_error is not None:
+            return self._failure(
+                command["request_id"],
+                shift_error["category"],
+                shift_error["message"],
+                details=shift_error.get("details"),
+            )
+
+        marker, warnings = self._maybe_add_technical_marker(
+            track_data["timeline"],
+            first_gap_start,
+            "Remove Gaps",
+            command["payload"].get("add_marker", True),
+        )
+        return self._success(
+            command["request_id"],
+            data={
+                "removed_gap_count": removed_gap_count,
+                "shifted_item_count": shifted_count,
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(track_data["project"], "GetName"),
+                },
+                "timeline": self._timeline_summary(track_data["project"], track_data["timeline"]),
+                "track_type": track_data["track_type"],
+                "track_index": track_data["track_index"],
+                "marker": marker,
+            },
+            warnings=warnings,
+        )
+
+    def _handle_timeline_insert_gap(self, command, resolve):
+        track_data, failure = self._resolve_track_payload(command, resolve)
+        if failure is not None:
+            return failure
+
+        try:
+            at_frame = int(command["payload"].get("at_frame"))
+            duration = int(command["payload"].get("duration"))
+        except (TypeError, ValueError):
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Gap insertion frame and duration must be integers.",
+            )
+        if duration <= 0:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Gap duration must be greater than zero.",
+            )
+
+        overlap_entry = self._find_track_item_covering_frame(track_data["items"], at_frame)
+        if overlap_entry is not None:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Gap cannot be inserted inside an existing timeline item.",
+                details={"at_frame": at_frame},
+            )
+
+        shifted_items = []
+        for entry in self._timeline_track_entries(track_data["items"]):
+            if entry["start_frame"] >= at_frame:
+                shifted_items.append({"item": entry["item"], "record_frame": entry["start_frame"] + duration})
+
+        shifted_count, shift_error = self._recreate_shifted_items(
+            track_data["project"],
+            track_data["timeline"],
+            shifted_items,
+        )
+        if shift_error is not None:
+            return self._failure(
+                command["request_id"],
+                shift_error["category"],
+                shift_error["message"],
+                details=shift_error.get("details"),
+            )
+
+        marker, warnings = self._maybe_add_technical_marker(
+            track_data["timeline"],
+            at_frame,
+            "Insert Gap",
+            command["payload"].get("add_marker", True),
+        )
+        return self._success(
+            command["request_id"],
+            data={
+                "inserted": True,
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(track_data["project"], "GetName"),
+                },
+                "timeline": self._timeline_summary(track_data["project"], track_data["timeline"]),
+                "track_type": track_data["track_type"],
+                "track_index": track_data["track_index"],
+                "at_frame": at_frame,
+                "duration": duration,
+                "shifted_item_count": shifted_count,
+                "marker": marker,
+            },
+            warnings=warnings,
         )
 
     def _handle_timeline_inspect(self, command, resolve):
@@ -2714,6 +3213,39 @@ class ResolveCommandCore(object):
             }
         return matches[0], None
 
+    def _resolve_clip_by_media_pool_path(self, root_folder, current_folder, path_value):
+        normalized_path = str(path_value or "").replace("\\", "/").strip()
+        if not normalized_path:
+            return None, {
+                "category": "validation_error",
+                "message": "Media pool clip path is required.",
+                "details": {"path": path_value},
+            }
+
+        path_segments = [segment.strip() for segment in normalized_path.split("/") if segment.strip()]
+        if not path_segments:
+            return None, {
+                "category": "validation_error",
+                "message": "Media pool clip path is required.",
+                "details": {"path": path_value},
+            }
+
+        clip_name = path_segments[-1]
+        folder_path = "/".join(path_segments[:-1])
+        is_absolute = normalized_path.startswith("/")
+        if folder_path:
+            folder_value = ("/" if is_absolute else "") + folder_path
+            target_folder, error = self._resolve_media_folder_by_path(
+                root_folder,
+                current_folder,
+                folder_value,
+            )
+            if error is not None:
+                return None, error
+        else:
+            target_folder = root_folder if is_absolute else current_folder
+        return self._resolve_clip_by_name(target_folder, clip_name)
+
     def _create_auto_timeline(self, project):
         media_pool = self._media_pool(project)
         if media_pool is None:
@@ -2772,6 +3304,214 @@ class ResolveCommandCore(object):
             except (TypeError, ValueError):
                 pass
         return {"track_type": None, "track_index": None, "item_index": None}
+
+    def _resolved_timeline_item_summary(
+        self,
+        timeline,
+        item,
+        track_type,
+        track_index,
+        fallback_name="Timeline Item",
+    ):
+        item_index = self._find_timeline_item_index(timeline, track_type, track_index, item)
+        return self._timeline_item_summary(
+            item,
+            item_index=item_index,
+            track_type=track_type,
+            track_index=track_index,
+            fallback_name=fallback_name,
+        )
+
+    def _find_timeline_item_index(self, timeline, track_type, track_index, item):
+        items = self._safe_call(timeline, "GetItemListInTrack", track_type, track_index)
+        if not isinstance(items, list):
+            return None
+        for item_index, candidate in enumerate(items):
+            if candidate is item:
+                return item_index
+        return None
+
+    def _timeline_item_source_range(self, item):
+        source_start_frame = self._timeline_item_frame(item, "GetSourceStartFrame")
+        source_end_frame = self._timeline_item_frame(item, "GetSourceEndFrame")
+        if source_start_frame is None or source_end_frame is None:
+            return None, None, {
+                "message": "Timeline item source frame range is unavailable.",
+                "details": {},
+            }
+        if source_start_frame >= source_end_frame:
+            item_duration = self._timeline_item_frame(item, "GetDuration")
+            if (
+                source_start_frame == 0
+                and source_end_frame == 0
+                and item_duration is not None
+                and item_duration > 0
+            ):
+                source_end_frame = item_duration
+            else:
+                return None, None, {
+                    "message": "Timeline item source frame range is invalid.",
+                    "details": {
+                        "source_start_frame": source_start_frame,
+                        "source_end_frame": source_end_frame,
+                    },
+                }
+        return source_start_frame, source_end_frame, None
+
+    def _timeline_track_entries(self, items):
+        entries = []
+        for item in items:
+            start_frame = self._timeline_item_frame(item, "GetStart")
+            end_frame = self._timeline_item_frame(item, "GetEnd")
+            if start_frame is None or end_frame is None:
+                continue
+            entries.append({"item": item, "start_frame": start_frame, "end_frame": end_frame})
+        entries.sort(key=lambda value: (value["start_frame"], value["end_frame"]))
+        return entries
+
+    def _find_track_item_covering_frame(self, items, frame):
+        for entry in self._timeline_track_entries(items):
+            if entry["start_frame"] < frame and frame < entry["end_frame"]:
+                return entry
+        return None
+
+    def _resolve_gap_range(self, items, frame_from, frame_to):
+        sorted_entries = self._timeline_track_entries(items)
+        if not sorted_entries:
+            return None, {
+                "category": "object_not_found",
+                "message": "No gaps were found on the requested track.",
+                "details": {"frame_from": frame_from},
+            }
+
+        previous_end = None
+        for index, entry in enumerate(sorted_entries):
+            start_frame = entry["start_frame"]
+            if previous_end is not None and start_frame > previous_end:
+                gap_start = previous_end
+                gap_end = start_frame
+                if frame_from >= gap_start and frame_from < gap_end:
+                    resolved_frame_to = gap_end if frame_to is None else frame_to
+                    if resolved_frame_to > gap_end:
+                        return None, {
+                            "category": "validation_error",
+                            "message": "Requested gap range extends into a timeline item.",
+                            "details": {
+                                "frame_from": frame_from,
+                                "frame_to": resolved_frame_to,
+                                "gap_end": gap_end,
+                            },
+                        }
+                    return {
+                        "frame_from": frame_from,
+                        "frame_to": resolved_frame_to,
+                        "duration": resolved_frame_to - frame_from,
+                        "following_items": sorted_entries[index:],
+                    }, None
+                if frame_to is not None and frame_from == gap_start and frame_to <= gap_end:
+                    return {
+                        "frame_from": frame_from,
+                        "frame_to": frame_to,
+                        "duration": frame_to - frame_from,
+                        "following_items": sorted_entries[index:],
+                    }, None
+            previous_end = entry["end_frame"]
+        return None, {
+            "category": "object_not_found",
+            "message": "No gap matching the requested range was found on the requested track.",
+            "details": {"frame_from": frame_from, "frame_to": frame_to},
+        }
+
+    def _recreate_shifted_items(self, project, timeline, shifted_items):
+        if not shifted_items:
+            return 0, None
+
+        media_pool = self._media_pool(project)
+        if media_pool is None:
+            return 0, {
+                "category": "object_not_found",
+                "message": "Current media pool is not available.",
+                "details": {},
+            }
+
+        ordered = list(shifted_items)
+        moving_left = False
+        for shift in ordered:
+            current_start = self._timeline_item_frame(shift["item"], "GetStart")
+            target_start = int(shift["record_frame"])
+            if current_start is not None and target_start < current_start:
+                moving_left = True
+                break
+        ordered.sort(
+            key=lambda value: self._timeline_item_frame(value["item"], "GetStart") or 0,
+            reverse=not moving_left,
+        )
+        shifted_count = 0
+        self._safe_call(project, "SetCurrentTimeline", timeline)
+        for shift in ordered:
+            item = shift["item"]
+            media_pool_item = self._safe_call(item, "GetMediaPoolItem")
+            if media_pool_item is None:
+                return 0, {
+                    "category": "execution_failure",
+                    "message": "Timeline item cannot be recreated because its media pool item is unavailable.",
+                    "details": {},
+                }
+            source_start_frame, source_end_frame, range_error = self._timeline_item_source_range(item)
+            if range_error is not None:
+                return 0, {
+                    "category": "execution_failure",
+                    "message": range_error["message"],
+                    "details": range_error.get("details"),
+                }
+            selector = self._timeline_item_selector(item)
+            track_type = selector.get("track_type")
+            track_index = selector.get("track_index")
+            if track_type not in ("video", "audio") or track_index is None:
+                return 0, {
+                    "category": "execution_failure",
+                    "message": "Timeline item track metadata is unavailable.",
+                    "details": {},
+                }
+            clip_info = {
+                "mediaPoolItem": media_pool_item,
+                "startFrame": source_start_frame,
+                "endFrame": source_end_frame,
+                "recordFrame": int(shift["record_frame"]),
+                "trackIndex": int(track_index),
+                "mediaType": 2 if track_type == "audio" else 1,
+            }
+            appended_items = self._safe_call(media_pool, "AppendToTimeline", [clip_info])
+            if not isinstance(appended_items, list) or len(appended_items) != 1:
+                return shifted_count, {
+                    "category": "execution_failure",
+                    "message": "Resolve failed to recreate the requested timeline items.",
+                    "details": {"requested_count": len(shifted_items), "completed_count": shifted_count},
+                }
+            deleted = bool(self._safe_call(timeline, "DeleteClips", [item], False))
+            if not deleted:
+                return shifted_count, {
+                    "category": "execution_failure",
+                    "message": "Resolve recreated a timeline item but failed to delete the source item.",
+                    "details": {"requested_count": len(shifted_items), "completed_count": shifted_count},
+                }
+            shifted_count += 1
+        return shifted_count, None
+
+    def _maybe_add_technical_marker(self, timeline, frame, name, add_marker):
+        if not add_marker:
+            return None, []
+        added = bool(self._safe_call(timeline, "AddMarker", int(frame), "Blue", name, "", 1, ""))
+        if not added:
+            return None, ["technical_marker_add_failed"]
+        return {
+            "frame": int(frame),
+            "color": "Blue",
+            "name": name,
+            "note": None,
+            "duration": 1,
+            "custom_data": "",
+        }, []
 
     def _ensure_timeline_tracks(self, timeline, required_track_indexes):
         for track_type in ("video", "audio"):

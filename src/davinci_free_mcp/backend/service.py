@@ -36,15 +36,20 @@ from davinci_free_mcp.contracts import (
     ResolveTimelineAppendClipsData,
     ResolveTimelineBuildFromPathsData,
     ResolveTimelineClipsPlaceData,
+    ResolveTimelineGapCloseData,
+    ResolveTimelineInsertGapData,
     ResolveTimelineItemDeleteData,
     ResolveTimelineItemInspectData,
     ResolveTimelineItemMoveData,
+    ResolveTimelineItemSetSourceRangeData,
+    ResolveTimelineItemSplitData,
     ResolveTimelineCreateEmptyData,
     ResolveTimelineCreateFromClipsData,
     ResolveTimelinePlacedItemData,
     ResolveTimelineCurrentData,
     ResolveTimelineInspectData,
     ResolveTimelineItemsListData,
+    ResolveTimelineRemoveGapsData,
     ResolveTimelineTrackInspectData,
     ResolveTimelineTrackItemsData,
     ResolveTimelineListData,
@@ -435,6 +440,126 @@ class ResolveBackendService:
             ResolveTimelineItemMoveData,
             target={"timeline": timeline_name} if timeline_name else {},
             payload=payload,
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_item_split(
+        self,
+        track_type: str,
+        track_index: int,
+        item_index: int,
+        record_frame: int,
+        timeline_name: str | None = None,
+        add_marker: bool = True,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_item_split",
+            ResolveTimelineItemSplitData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={
+                "track_type": track_type,
+                "track_index": track_index,
+                "item_index": item_index,
+                "record_frame": record_frame,
+                "add_marker": add_marker,
+            },
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_item_set_source_range(
+        self,
+        track_type: str,
+        track_index: int,
+        item_index: int,
+        source_start_frame: int,
+        source_end_frame: int,
+        timeline_name: str | None = None,
+        add_marker: bool = True,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_item_set_source_range",
+            ResolveTimelineItemSetSourceRangeData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={
+                "track_type": track_type,
+                "track_index": track_index,
+                "item_index": item_index,
+                "source_start_frame": source_start_frame,
+                "source_end_frame": source_end_frame,
+                "add_marker": add_marker,
+            },
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_gap_close(
+        self,
+        track_type: str,
+        track_index: int,
+        frame_from: int,
+        frame_to: int | None = None,
+        timeline_name: str | None = None,
+        add_marker: bool = True,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        payload: dict[str, object] = {
+            "track_type": track_type,
+            "track_index": track_index,
+            "frame_from": frame_from,
+            "add_marker": add_marker,
+        }
+        if frame_to is not None:
+            payload["frame_to"] = frame_to
+        return self._invoke_command(
+            "timeline_gap_close",
+            ResolveTimelineGapCloseData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload=payload,
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_remove_gaps(
+        self,
+        track_type: str,
+        track_index: int,
+        timeline_name: str | None = None,
+        add_marker: bool = True,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_remove_gaps",
+            ResolveTimelineRemoveGapsData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={
+                "track_type": track_type,
+                "track_index": track_index,
+                "add_marker": add_marker,
+            },
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_insert_gap(
+        self,
+        track_type: str,
+        track_index: int,
+        at_frame: int,
+        duration: int,
+        timeline_name: str | None = None,
+        add_marker: bool = True,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_insert_gap",
+            ResolveTimelineInsertGapData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={
+                "track_type": track_type,
+                "track_index": track_index,
+                "at_frame": at_frame,
+                "duration": duration,
+                "add_marker": add_marker,
+            },
             timeout_ms=timeout_ms,
         )
 

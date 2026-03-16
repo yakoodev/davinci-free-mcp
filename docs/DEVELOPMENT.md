@@ -82,15 +82,21 @@ Must not own:
 
 Recommended baseline:
 
-```bash
-uv venv
+```powershell
+& 'C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe' -m venv .venv
 ```
 
 or:
 
-```bash
-python -m venv .venv
+```powershell
+uv venv
 ```
+
+Environment notes for this Windows host:
+
+- recommended interpreter: `C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe`
+- minimum supported version for the main project: `Python 3.10+`
+- `python` in the current `PATH` may still resolve to `Python36`, so plain `python ...` is not a reliable command shape here
 
 ### Install dependencies
 
@@ -103,38 +109,44 @@ Expected dependency profile:
 
 Suggested command shape:
 
-```bash
+```powershell
+& 'C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe' -m pip install -e .[dev]
+```
+
+or:
+
+```powershell
 uv sync
 ```
 
 or:
 
-```bash
-pip install -e .[dev]
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e .[dev]
 ```
 
 ### Run MCP server in dev mode
 
 Expected target:
 
-```bash
-uv run python -m davinci_free_mcp.server.main
+```powershell
+& 'C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe' -m davinci_free_mcp.server.main
 ```
 
 ### Run backend-only tests
 
 Expected target:
 
-```bash
-pytest tests/backend -q
+```powershell
+& 'C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe' -m pytest tests/backend -q
 ```
 
 ### Run bridge adapter tests
 
 Expected target:
 
-```bash
-pytest tests/bridge -q
+```powershell
+& 'C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe' -m pytest tests/bridge -q
 ```
 
 ### Run manual Resolve integration checks
@@ -177,9 +189,11 @@ The repository includes PowerShell helper scripts to keep the Windows host and D
 - `scripts/dev_smoke.ps1`
   Run a guarded smoke flow. It refuses to reset runtime if an executor appears to already be active.
 - `scripts/dev_agent_live_run.ps1`
-  Agent-only host helper that waits for a healthy executor, opens a target Resolve project, and runs a host command outside MCP.
+  Agent-only host helper that reuses a healthy executor when possible and otherwise performs a Python-aware cold start, launches `resolve_executor_bootstrap` via Resolve UI automation, opens a target project, and runs a host command outside MCP.
 - `scripts/dev_smoke_live.ps1`
-  Thin wrapper around `dev_agent_live_run.ps1` for non-interactive live smoke runs.
+  Thin wrapper around `dev_agent_live_run.ps1` for canonical non-interactive live smoke runs.
+- `scripts/dev_launch_executor_ui.ps1`
+  Host-side helper that invokes `resolve_executor_bootstrap` through the Resolve UI menus via `pywinauto`.
 - `scripts/dev_external_scripting_diagnostics.ps1`
   Agent-only host diagnostic for external Resolve scripting availability and optional `LoadProject()` verification.
 - `scripts/dev_agent_external_run.ps1`
@@ -194,11 +208,9 @@ Recommended cycle:
 
 1. `.\scripts\dev_up.ps1`
 2. `.\scripts\dev_install_executor.ps1`
-3. `.\scripts\dev_start_resolve_with_python.ps1`
-4. open the live test project
-5. run `resolve_executor_bootstrap` from the Resolve menu
+3. `.\scripts\dev_smoke_live.ps1 -ProjectName "Untitled Project 5" -Command "C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe -m pytest tests\integration -q"`
+4. if the autonomous helper fails, fall back to the manual live sequence from `docs/LIVE_BOOTSTRAP_AUTOMATION.md`
 6. `.\scripts\dev_diagnostics.ps1`
-7. `.\scripts\dev_smoke_live.ps1 -ProjectName "Demo Project" -Command "pytest tests\integration -q"`
 
 Recommended retest cycle after feature changes:
 
@@ -207,20 +219,26 @@ Recommended retest cycle after feature changes:
 3. recreate the backend container:
    `docker compose down`
    `.\scripts\dev_up.ps1`
-4. start Resolve with `.\scripts\dev_start_resolve_with_python.ps1`
-5. open the test project, currently `Untitled Project 5`
-6. launch `resolve_executor_bootstrap`
-7. run `.\scripts\dev_diagnostics.ps1`
-8. run the live MCP or smoke command you actually changed code for
+4. run `.\scripts\dev_smoke_live.ps1 -ProjectName "Untitled Project 5" -Command "C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe -m pytest tests\integration -q"`
+5. if needed, use the manual fallback from `docs/LIVE_BOOTSTRAP_AUTOMATION.md`
 
 Important:
 
 - any time `scripts/resolve_executor_bootstrap.py` changes, rerun `.\scripts\dev_install_executor.ps1`
 - then relaunch the bootstrap from Resolve so the live executor picks up the new command whitelist
 - on this machine, if `Workspace -> Scripts` is disabled, Resolve was likely started without a usable Python in `PATH`; restart it with `.\scripts\dev_start_resolve_with_python.ps1`
+- `.\scripts\dev_smoke_live.ps1` is the canonical autonomous live smoke path on this machine; the manual UI-driven flow is the fallback when the helper reports a specific automation failure
+- for local test runs on this machine, prefer `C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe -m pytest ...` over plain `pytest` or `python -m pytest`
 - never run `.\scripts\dev_reset_runtime.ps1 -IncludeLock` while Resolve is still open
 - keep `CHANGELOG.md` updated for every meaningful change set, milestone, or behavior change
 - the external scripting fallback is temporary and agent-only; do not treat it as the default product architecture for Resolve Free
+
+Recommended Python 3.11 smoke set on this host:
+
+1. `C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe -m pytest tests\contracts\test_models.py -q`
+2. `C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe -m pytest tests\backend\test_service.py -q`
+3. `C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe -m pytest tests\integration\test_server_smoke.py -q`
+4. `C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe -m pytest tests\integration\test_resolve_health_flow.py -q`
 
 ## Patch Notes
 

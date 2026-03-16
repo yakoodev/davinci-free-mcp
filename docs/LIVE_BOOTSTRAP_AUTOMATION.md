@@ -344,14 +344,15 @@ Then redo the full flow.
 
 When validating live Resolve integration on this machine, use this priority order:
 
-1. reinstall bootstrap if it changed
-2. restart backend container
-3. start Resolve with `dev_start_resolve_with_python.ps1`
-4. open `Untitled Project 5`
-5. launch `resolve_executor_bootstrap` via Resolve UI automation using `pywinauto`
-6. verify `runtime/status/executor_status.json` with `resolve.connected = true`
-7. run `.\scripts\dev_diagnostics.ps1`
-8. run public MCP `list_tools` and `call_tool` checks against `http://127.0.0.1:8000/mcp`
+1. prefer `.\scripts\dev_smoke_live.ps1 -ProjectName "Untitled Project 5" -Command "C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe -m pytest tests\integration -q"` as the canonical autonomous smoke path
+2. if autonomous smoke fails, reinstall bootstrap if it changed
+3. restart backend container
+4. start Resolve with `dev_start_resolve_with_python.ps1`
+5. open `Untitled Project 5`
+6. launch `resolve_executor_bootstrap` via Resolve UI automation using `pywinauto`
+7. verify `runtime/status/executor_status.json` with `resolve.connected = true`
+8. run `.\scripts\dev_diagnostics.ps1`
+9. run public MCP `list_tools` and `call_tool` checks against `http://127.0.0.1:8000/mcp`
 
 Do not treat:
 

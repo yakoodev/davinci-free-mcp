@@ -63,12 +63,14 @@ Symptoms:
 
 - `executor_status.state` is `stale`
 - `last_poll_at` stops advancing
+- live helper kills an apparently healthy session and never relaunches `resolve_executor_bootstrap`
 
 Checks:
 
 - verify Resolve Console still prints `[DFMCP] alive ...`
 - inspect `.\scripts\dev_logs.ps1`
 - if the executor is no longer active, restart it from the Resolve menu
+- if `.\scripts\dev_smoke_live.ps1` fails before `resolve.connected = true`, rerun `.\scripts\dev_launch_executor_ui.ps1 -EnumerateOnly` to inspect current Resolve menu items and compare them with `docs/LIVE_BOOTSTRAP_AUTOMATION.md`
 
 ## Missing Python in Resolve
 

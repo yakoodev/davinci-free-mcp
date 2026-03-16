@@ -366,13 +366,13 @@ Expected result:
 For agent-only live validation, use the host helper instead of opening the project by hand:
 
 ```powershell
-.\scripts\dev_agent_live_run.ps1 -ProjectName "Demo Project" -Command "pytest tests\integration -q"
+.\scripts\dev_agent_live_run.ps1 -ProjectName "Untitled Project 5" -Command "C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe -m pytest tests\integration -q"
 ```
 
 What it does:
 
 - reuses a healthy executor when available
-- otherwise recovers stale host runtime, starts Resolve, and waits for the embedded executor
+- otherwise performs a Python-aware Resolve cold start, launches `resolve_executor_bootstrap` through Resolve UI automation, and waits for `resolve.connected = true`
 - opens the requested project through the backend `project_open` command
 - runs the supplied command on the host outside MCP
 
@@ -380,14 +380,14 @@ Important:
 
 - the backend container must already be running
 - bootstrap installation can be refreshed with `-ReinstallBootstrap`
+- `.\scripts\dev_smoke_live.ps1` is the canonical autonomous smoke path on this machine
+- if the helper reports a UI automation failure, follow `docs/LIVE_BOOTSTRAP_AUTOMATION.md` as the manual fallback
 - if embedded scripts are disabled in Resolve, restart Resolve with `.\scripts\dev_start_resolve_with_python.ps1`
-- the most reliable proven path on this machine is still: start Resolve with Python in `PATH`, open the test project, then launch `resolve_executor_bootstrap` from the menu
-- if an agent keeps getting stuck between external scripting checks and embedded executor checks, follow `docs/LIVE_BOOTSTRAP_AUTOMATION.md` exactly
 
 For a smoke-style wrapper around the same flow:
 
 ```powershell
-.\scripts\dev_smoke_live.ps1 -ProjectName "Demo Project" -Command "pytest tests\integration -q"
+.\scripts\dev_smoke_live.ps1 -ProjectName "Untitled Project 5" -Command "C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe -m pytest tests\integration -q"
 ```
 
 Recommended public MCP smoke for the new low-level toolset:

@@ -2,6 +2,7 @@ from davinci_free_mcp.contracts import (
     AudioEventsData,
     AudioProbeData,
     AudioTranscriptionData,
+    EditPlanProposal,
     TranscriptSidecarData,
     BridgeCommand,
     BridgeResult,
@@ -340,6 +341,54 @@ def test_timeline_item_move_data_round_trip() -> None:
     assert restored.moved is True
     assert restored.source_item.track_index == 1
     assert restored.item.track_index == 2
+
+
+def test_edit_plan_proposal_round_trip() -> None:
+    payload = EditPlanProposal.model_validate(
+        {
+            "source_path": "C:/videos/cs2/demo.mp4",
+            "target_timeline_name": "CS2 Frags",
+            "summary": "3 candidate highlight cuts based on speech and impact peaks.",
+            "segments": [
+                {
+                    "start": 12.4,
+                    "end": 18.9,
+                    "label": "Entry frag",
+                    "score": 0.91,
+                    "source_track_index": 1,
+                    "transcript_text": "nice shot",
+                }
+            ],
+            "operations": [
+                {
+                    "tool_name": "timeline_clips_place",
+                    "description": "Place the initial highlight segment.",
+                    "timeline_name": "CS2 Frags",
+                    "arguments": {
+                        "placements": [
+                            {
+                                "media_pool_path": "/Master/Counter-strike 2/demo.mp4",
+                                "record_frame": 0,
+                                "track_index": 1,
+                            }
+                        ]
+                    },
+                    "source_segment": {
+                        "start": 12.4,
+                        "end": 18.9,
+                        "label": "Entry frag",
+                    },
+                }
+            ],
+            "warnings": ["Candidate timestamps still need live Resolve spot-checks."],
+        }
+    )
+
+    restored = EditPlanProposal.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.target_timeline_name == "CS2 Frags"
+    assert restored.operations[0].tool_name == "timeline_clips_place"
+    assert restored.segments[0].score == 0.91
 
 
 def test_audio_probe_data_round_trip() -> None:

@@ -45,6 +45,19 @@ function Get-PreferredPython {
 }
 
 $python = Get-PreferredPython
+$pythonCommand = Get-Command $python -ErrorAction Stop
+$pythonPath = $pythonCommand.Source
+$pythonDir = Split-Path -Parent $pythonPath
+$pythonRoot = Split-Path -Parent $pythonDir
+$pythonScriptsDir = Join-Path $pythonRoot "Scripts"
+
+$env:DFMCP_PYTHON = $pythonPath
+$startupPath = @($pythonDir, $pythonRoot)
+if (Test-Path $pythonScriptsDir) {
+    $startupPath += $pythonScriptsDir
+}
+$startupPath += $env:PATH
+$env:PATH = ($startupPath -join ";")
 
 $args = @(
     "-m", "davinci_free_mcp.external_agent.startup",

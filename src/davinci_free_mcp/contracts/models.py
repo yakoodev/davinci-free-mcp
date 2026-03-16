@@ -354,7 +354,8 @@ class ResolveTimelineListData(BaseModel):
 
 
 class ResolveTimelineClipPlacement(BaseModel):
-    clip_name: str
+    clip_name: str | None = None
+    media_pool_path: str | None = None
     record_frame: int
     track_index: int = 1
     media_type: int = 1
@@ -403,6 +404,58 @@ class ResolveTimelineItemMoveData(BaseModel):
     timeline: ResolveTimelineSummary
     source_item: ResolveTimelinePlacedItemData
     item: ResolveTimelinePlacedItemData
+
+
+class ResolveTimelineItemSplitData(BaseModel):
+    split_frame: int
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    left_item: ResolveTimelinePlacedItemData
+    right_item: ResolveTimelinePlacedItemData
+    marker: ResolveMarkerSummary | None = None
+
+
+class ResolveTimelineItemSetSourceRangeData(BaseModel):
+    updated: bool
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    source_item: ResolveTimelinePlacedItemData
+    item: ResolveTimelinePlacedItemData
+    marker: ResolveMarkerSummary | None = None
+
+
+class ResolveTimelineGapCloseData(BaseModel):
+    closed: bool
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    track_type: str
+    track_index: int
+    frame_from: int
+    frame_to: int
+    shifted_item_count: int
+    marker: ResolveMarkerSummary | None = None
+
+
+class ResolveTimelineRemoveGapsData(BaseModel):
+    removed_gap_count: int
+    shifted_item_count: int
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    track_type: str
+    track_index: int
+    marker: ResolveMarkerSummary | None = None
+
+
+class ResolveTimelineInsertGapData(BaseModel):
+    inserted: bool
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    track_type: str
+    track_index: int
+    at_frame: int
+    duration: int
+    shifted_item_count: int
+    marker: ResolveMarkerSummary | None = None
 
 
 class ToolResultEnvelope(BaseModel):
@@ -462,6 +515,42 @@ class VideoFeatureFlags(BaseModel):
 class SegmentTimeRange(BaseModel):
     start: float
     end: float
+
+
+EditPlanOperationName = Literal[
+    "timeline_clips_place",
+    "timeline_item_split",
+    "timeline_item_set_source_range",
+    "timeline_gap_close",
+    "timeline_remove_gaps",
+    "timeline_insert_gap",
+]
+
+
+class EditPlanSourceSegment(BaseModel):
+    start: float
+    end: float
+    label: str | None = None
+    score: float | None = None
+    source_track_index: int | None = None
+    transcript_text: str | None = None
+
+
+class EditPlanOperation(BaseModel):
+    tool_name: EditPlanOperationName
+    description: str | None = None
+    timeline_name: str | None = None
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    source_segment: EditPlanSourceSegment | None = None
+
+
+class EditPlanProposal(BaseModel):
+    source_path: str
+    target_timeline_name: str | None = None
+    summary: str | None = None
+    segments: list[EditPlanSourceSegment] = Field(default_factory=list)
+    operations: list[EditPlanOperation] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class AudioProbeMediaData(BaseModel):

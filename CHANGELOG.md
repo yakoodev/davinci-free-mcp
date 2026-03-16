@@ -4,6 +4,18 @@
 
 ## Unreleased
 
+- Добавлен первый rough-cut edit toolkit: `timeline_item_split`, `timeline_item_set_source_range`, `timeline_gap_close`, `timeline_remove_gaps`, `timeline_insert_gap`.
+- Новые structural timeline mutations теперь могут автоматически ставить технические маркеры на edit points с возможностью отключения через `add_marker=false`.
+- `timeline_clips_place` получил path-oriented clip selector через `media_pool_path` без ломки существующего `clip_name` workflow.
+- Исправлен fallback в `timeline_clips_place`: пустой `media_pool_path` больше не ломает валидный `clip_name` selector.
+- Rough-cut gap operations теперь переразмещают shifted items по одному, чтобы не создавать временные overlap-состояния до удаления исходников.
+- Документация разработки и smoke-команды на этом хосте теперь зафиксированы на найденном `Python 3.11.9` по пути `C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe`.
+- `dev_agent_live_run.ps1` и `dev_smoke_live.ps1` переведены на Python-backed autonomous live runner с Python-aware Resolve startup, reuse healthy executor и UI automation launch для `resolve_executor_bootstrap`.
+- Добавлен reusable host helper `scripts/dev_launch_executor_ui.ps1` и Python module `davinci_free_mcp.external_agent.bootstrap_ui` для запуска embedded bootstrap через Resolve UI меню.
+- Добавлены unit tests для live runner decision logic и Resolve UI bootstrap launcher без требования к настоящему Resolve.
+- Добавлен machine-readable `EditPlanProposal` contract и design note `docs/EDIT_PLANNING.md` для следующего сценария analysis -> proposal -> rough-cut apply.
+- Добавлены fake integration tests для split/trim/gap сценариев и marker-aware rough-cut правок.
+- Добавлены backend normalization tests для новых rough-cut MCP tools и fake integration coverage для path-selector edge cases и overlap-sensitive gap compaction.
 - Добавлены low-level MCP tools для локального анализа аудио и видео: `audio_probe`, `audio_transcribe_segments`, `audio_detect_events`, `video_probe`, `video_detect_shots`, `video_extract_segment_screenshots`, `video_segment_from_speech`, `video_segment_visual`, `video_segment_audio_visual`.
 - Добавлен локальный media-analysis слой вне Resolve bridge с сохранением артефактов в `runtime/analysis/<analysis_id>/`.
 - Добавлены контракты и тесты для segment-oriented audio/video результатов, включая voiced и no-speech video сценарии.

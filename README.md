@@ -107,6 +107,8 @@ The highest-risk part of the system is not the MCP server. It is the handshake b
   Short Russian overview and quick-start notes.
 - `docs/TROUBLESHOOTING.md`
   Common runtime and development issues.
+- `docs/EDIT_PLANNING.md`
+  Machine-readable proposal contract between media analysis outputs and low-level rough-cut execution.
 - `docs/RISKS_AND_ASSUMPTIONS.md`
   Confirmed facts, hypotheses, risks, and prototype priorities.
 - `CHANGELOG.md`
@@ -159,15 +161,20 @@ Recommended retest flow after changing live Resolve features:
 For agent-only live validation against an existing Resolve project:
 
 ```powershell
-.\scripts\dev_agent_live_run.ps1 -ProjectName "Demo Project" -Command "pytest tests\integration -q"
+.\scripts\dev_agent_live_run.ps1 -ProjectName "Demo Project" -Command "C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe -m pytest tests\integration -q"
 ```
 
 For agent-only fallback automation via external scripting access:
 
 ```powershell
 .\scripts\dev_external_scripting_diagnostics.ps1 -ProjectName "Demo Project"
-.\scripts\dev_agent_external_run.ps1 -ProjectName "Demo Project" -Command "pytest tests\integration -q"
+.\scripts\dev_agent_external_run.ps1 -ProjectName "Demo Project" -Command "C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe -m pytest tests\integration -q"
 ```
+
+Development note for this Windows host:
+
+- preferred interpreter: `C:\Users\Yakoo\AppData\Local\Python\pythoncore-3.11-64\python.exe` (`Python 3.11.9`)
+- plain `python` may still resolve to `Python36`, so use the explicit path above or a project venv for tests and local tooling
 
 To experiment with the internal REST prototype, copy `.env.example` to `.env` and set:
 
