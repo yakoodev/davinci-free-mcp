@@ -2,7 +2,12 @@
 
 ## Summary
 
-The first MCP tool set should stay narrow, low-level, and reliable. The goal is not full Resolve API coverage. The goal is a usable base for project, media, and timeline operations that can later support composed workflows and AI features.
+The current MCP tool set is intentionally split into two layers:
+
+- low-level Resolve tools that cross the bridge into the embedded executor
+- local media-analysis tools that run in the backend and emit structured artifacts for later edit planning
+
+The goal is still not full Resolve API coverage. The goal is a usable base for project, media, timeline, marker, and analysis workflows that can later support composed and domain-specific features.
 
 Tool inputs and outputs should be defined with Pydantic models and exposed to MCP as JSON-schema-friendly contracts.
 
@@ -271,6 +276,16 @@ Output contract:
 
 Preconditions:
 A project must be open and the clip name must resolve uniquely in the current media pool folder.
+
+### Additional media-pool tools already implemented
+
+The current codebase also exposes:
+
+- `media_pool_folder_root`
+- `media_pool_folder_path`
+- `media_pool_folder_list_recursive`
+- `media_pool_folder_open_path`
+- `media_clip_inspect_path`
 
 ## Timeline Tools
 
@@ -564,6 +579,21 @@ Move one timeline item by recreating the same source range at a new position and
 Free-mode notes:
 V1 does not promise preservation of transitions, Fusion/effects, or complex linked state.
 
+### Additional timeline tools already implemented
+
+The current codebase also exposes:
+
+- `timeline_inspect`
+- `timeline_track_items_list`
+- `timeline_track_inspect`
+- `timeline_item_inspect`
+- `timeline_item_delete`
+- `timeline_item_split`
+- `timeline_item_set_source_range`
+- `timeline_gap_close`
+- `timeline_remove_gaps`
+- `timeline_insert_gap`
+
 ## Marker Tools
 
 ### `marker_add`
@@ -614,6 +644,34 @@ Output contract:
 Purpose:
 Delete a marker by frame on the current or specified timeline.
 
+### Additional marker tools already implemented
+
+The current codebase also exposes:
+
+- `marker_inspect`
+- `marker_list_range`
+
+## Local Media-Analysis Tools
+
+These tools do not require a live Resolve session. They run in the backend against local files, store artifacts under `runtime/analysis/<analysis_id>/`, and return structured outputs suitable for later rough-cut planning.
+
+Currently implemented:
+
+- `audio_probe`
+- `audio_transcribe_segments`
+- `audio_detect_events`
+- `video_probe`
+- `video_detect_shots`
+- `video_sample_frames`
+- `video_extract_roi_frames`
+- `video_build_contact_sheet`
+- `video_detect_overlay_events`
+- `video_extract_segment_screenshots`
+- `video_segment_from_speech`
+- `video_segment_visual`
+- `video_segment_audio_visual`
+- `edit_plan_from_candidates`
+
 ## Low-Level vs Composite Tools
 
 ### Low-level primitives for MVP
@@ -631,23 +689,60 @@ Delete a marker by frame on the current or specified timeline.
 - `media_pool_folder_open`
 - `media_pool_folder_create`
 - `media_pool_folder_up`
+- `media_pool_folder_root`
+- `media_pool_folder_path`
+- `media_pool_folder_list_recursive`
+- `media_pool_folder_open_path`
 - `media_clip_inspect`
+- `media_clip_inspect_path`
 - `timeline_list`
 - `timeline_current`
 - `timeline_create_empty`
 - `timeline_set_current`
 - `timeline_append_clips`
+- `timeline_clips_place`
 - `timeline_create_from_clips`
+- `timeline_build_from_paths`
 - `timeline_items_list`
+- `timeline_inspect`
+- `timeline_track_items_list`
+- `timeline_track_inspect`
+- `timeline_item_inspect`
+- `timeline_item_delete`
+- `timeline_item_move`
+- `timeline_item_split`
+- `timeline_item_set_source_range`
+- `timeline_gap_close`
+- `timeline_remove_gaps`
+- `timeline_insert_gap`
 - `marker_add`
 - `marker_list`
+- `marker_inspect`
+- `marker_list_range`
 - `marker_delete`
+
+### Local analysis primitives already available
+
+- `audio_probe`
+- `audio_transcribe_segments`
+- `audio_detect_events`
+- `video_probe`
+- `video_detect_shots`
+- `video_sample_frames`
+- `video_extract_roi_frames`
+- `video_build_contact_sheet`
+- `video_detect_overlay_events`
+- `video_extract_segment_screenshots`
+- `video_segment_from_speech`
+- `video_segment_visual`
+- `video_segment_audio_visual`
+- `edit_plan_from_candidates`
 
 ### Composite tools for later
 
-- import a folder and assemble a timeline
+- apply `EditPlanProposal` automatically to a target timeline
+- domain-specific candidate extraction modules that compile into shared low-level operations
 - add review markers from an external metadata file
-- build a rough cut from structured clip ranges
 
 ## Explicit Deferrals
 
@@ -655,7 +750,7 @@ Delete a marker by frame on the current or specified timeline.
 - render automation breadth
 - Fusion-heavy actions
 - cloud/database switching
-- AI/ML features
-- complex edit transforms
+- high-level editing copilots that bypass the low-level contracts
+- complex edit transforms beyond the current split/trim/gap toolset
 - deep color workflows
-- long-running media analysis pipelines
+- long-running distributed media analysis pipelines

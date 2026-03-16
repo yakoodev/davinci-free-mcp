@@ -13,22 +13,23 @@
 
 ## Что уже есть
 
-Сейчас в проекте уже работают:
+Сейчас в проекте уже есть полноценная сквозная связка:
 
-- `resolve_health`
-- `project_current`
-- `project_list`
-- `timeline_list`
+- Dockerized MCP/backend service
+- `file_queue` bridge и прототип `local_http`
+- standalone bootstrap/executor для запуска внутри Resolve Free
+- встроенная модульная система MCP: базовый `core` module плюс opt-in модули через `DFMCP_ENABLED_MODULES` и `DFMCP_DISABLED_MODULES`
+- low-level Resolve tools для проектов, media pool, timeline и markers
+- локальный media-analysis слой для аудио/видео вне Resolve bridge
+- диагностика по `instance_id`, `executor_status.json` и lock ownership
+- PowerShell helper scripts для запуска, smoke-check и live validation
 
-Также уже есть:
+Из наиболее полезных публичных tools уже доступны:
 
-- `file_queue` bridge
-- прототип `local_http` bridge
-- standalone bootstrap script для запуска внутри Resolve
-- диагностика по `instance_id`
-- `executor_status.json`
-- lock ownership diagnostics
-- PowerShell helper scripts для разработки
+- Resolve/project: `resolve_health`, `project_current`, `project_list`, `project_manager_folder_list`, `project_manager_folder_open`, `project_manager_folder_up`, `project_manager_folder_path`, `project_open`
+- Media pool: `media_pool_list`, `media_pool_folder_open`, `media_pool_folder_create`, `media_pool_folder_up`, `media_pool_folder_root`, `media_pool_folder_path`, `media_pool_folder_list_recursive`, `media_pool_folder_open_path`, `media_import`, `media_clip_inspect`, `media_clip_inspect_path`
+- Timeline/markers: `timeline_list`, `timeline_current`, `timeline_create_empty`, `timeline_set_current`, `timeline_append_clips`, `timeline_clips_place`, `timeline_create_from_clips`, `timeline_build_from_paths`, `timeline_items_list`, `timeline_inspect`, `timeline_track_items_list`, `timeline_track_inspect`, `timeline_item_inspect`, `timeline_item_delete`, `timeline_item_move`, `timeline_item_split`, `timeline_item_set_source_range`, `timeline_gap_close`, `timeline_remove_gaps`, `timeline_insert_gap`, `marker_add`, `marker_list`, `marker_inspect`, `marker_list_range`, `marker_delete`
+- Local media analysis: `audio_probe`, `audio_transcribe_segments`, `audio_detect_events`, `video_probe`, `video_detect_shots`, `video_sample_frames`, `video_extract_roi_frames`, `video_build_contact_sheet`, `video_detect_overlay_events`, `video_extract_segment_screenshots`, `video_segment_from_speech`, `video_segment_visual`, `video_segment_audio_visual`, `edit_plan_from_candidates`
 
 ## Как это устроено
 
@@ -40,6 +41,7 @@
 
 - `file_queue` — основной рабочий transport
 - `local_http` — экспериментальный второй transport
+- media-analysis tools выполняются локально в backend и не требуют live Resolve session
 
 ## Быстрый старт
 
@@ -150,6 +152,7 @@ Workspace -> Scripts -> Utility -> resolve_executor_bootstrap
 - `instance_id` в status и lock совпадает
 - в логе только один `instance_id`
 - `resolve_health`, `project_current`, `project_list`, `timeline_list` успешны
+- при локальном анализе появляются артефакты в `runtime/analysis/<analysis_id>/`
 
 ## Как тестировать REST-вариант
 

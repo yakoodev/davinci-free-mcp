@@ -4,6 +4,13 @@
 
 ## Unreleased
 
+- Документация синхронизирована с текущим кодом: README, `docs/RUNNING.md`, `docs/README.ru.md` и `docs/TOOLS.md` теперь описывают полный актуальный MCP surface, локальный media-analysis слой и модульную систему.
+
+- Добавлена встроенная модульная система MCP под `src/davinci_free_mcp/modules/` со статическим registry/loader, `core` module, шаблоном `template_custom` и skeleton-модулем `cs2_clips`, включаемыми через `DFMCP_ENABLED_MODULES` и `DFMCP_DISABLED_MODULES`.
+- Монолитная регистрация tools вынесена за модульную границу: сервер теперь поднимает built-in modules декларативно, а `core` module регистрирует общий low-level Resolve и generic media-analysis surface.
+- В reusable media-analysis слой перенесены массово полезные ad hoc-capabilities: `video_sample_frames`, `video_extract_roi_frames`, `video_build_contact_sheet`, `video_detect_overlay_events`, `edit_plan_from_candidates`.
+- Добавлены contracts и тесты для module descriptors, sampled-frame/contact-sheet/overlay-event outputs и deterministic proposal-building из candidate events.
+- Добавлен helper `scripts/cs2_auto_kill_segments.py` для авто-поиска highlight-сегментов CS2 по `*.transcript.json` sidecar с машинно-читаемым JSON output для последующей сборки таймлайна.
 - Добавлен первый rough-cut edit toolkit: `timeline_item_split`, `timeline_item_set_source_range`, `timeline_gap_close`, `timeline_remove_gaps`, `timeline_insert_gap`.
 - Новые structural timeline mutations теперь могут автоматически ставить технические маркеры на edit points с возможностью отключения через `add_marker=false`.
 - `timeline_clips_place` получил path-oriented clip selector через `media_pool_path` без ломки существующего `clip_name` workflow.

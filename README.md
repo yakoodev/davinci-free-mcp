@@ -16,15 +16,18 @@ The common external scripting flow used by many Resolve tools assumes that an ex
 
 ## Current Status
 
-The repository currently contains a working MVP vertical slice:
+The repository currently contains a working end-to-end slice with three major surfaces:
 
 - Dockerized external MCP/backend service
 - `file_queue` bridge over a shared runtime directory
 - prototype `local_http` bridge for an executor-hosted REST server inside Resolve
 - standalone internal executor for Resolve Free
-- project and timeline tools: `resolve_health`, `project_current`, `project_list`, `project_manager_folder_list`, `project_manager_folder_open`, `project_manager_folder_up`, `project_manager_folder_path`, `project_open`, `timeline_list`, `timeline_current`, `timeline_create_empty`, `timeline_set_current`, `timeline_create_from_clips`, `timeline_build_from_paths`
-- media tools: `media_pool_list`, `media_pool_folder_open`, `media_pool_folder_create`, `media_pool_folder_up`, `media_clip_inspect`, `media_import`
-- edit structure and review tools: `timeline_append_clips`, `timeline_items_list`, `timeline_item_inspect`, `timeline_item_delete`, `timeline_item_move`, `marker_add`, `marker_list`, `marker_delete`
+- built-in module registry with always-on `core` tools plus opt-in domain/template modules via `DFMCP_ENABLED_MODULES` and `DFMCP_DISABLED_MODULES`
+- low-level Resolve project tools: `resolve_health`, `project_current`, `project_list`, `project_manager_folder_list`, `project_manager_folder_open`, `project_manager_folder_up`, `project_manager_folder_path`, `project_open`
+- low-level media-pool tools: `media_pool_list`, `media_pool_folder_open`, `media_pool_folder_create`, `media_pool_folder_up`, `media_pool_folder_root`, `media_pool_folder_path`, `media_pool_folder_list_recursive`, `media_pool_folder_open_path`, `media_import`, `media_clip_inspect`, `media_clip_inspect_path`
+- low-level timeline tools: `timeline_list`, `timeline_current`, `timeline_create_empty`, `timeline_set_current`, `timeline_append_clips`, `timeline_clips_place`, `timeline_create_from_clips`, `timeline_build_from_paths`, `timeline_items_list`, `timeline_inspect`, `timeline_track_items_list`, `timeline_track_inspect`, `timeline_item_inspect`, `timeline_item_delete`, `timeline_item_move`, `timeline_item_split`, `timeline_item_set_source_range`, `timeline_gap_close`, `timeline_remove_gaps`, `timeline_insert_gap`
+- low-level marker tools: `marker_add`, `marker_list`, `marker_inspect`, `marker_list_range`, `marker_delete`
+- local media-analysis tools outside the Resolve bridge: `audio_probe`, `audio_transcribe_segments`, `audio_detect_events`, `video_probe`, `video_detect_shots`, `video_sample_frames`, `video_extract_roi_frames`, `video_build_contact_sheet`, `video_detect_overlay_events`, `video_extract_segment_screenshots`, `video_segment_from_speech`, `video_segment_visual`, `video_segment_audio_visual`, `edit_plan_from_candidates`
 - console-first executor status inside DaVinci Resolve
 - machine-readable executor heartbeat in `runtime/status/executor_status.json`
 - instance-aware diagnostics with `instance_id` and lock ownership visibility
@@ -192,4 +195,4 @@ DFMCP_LOCAL_HTTP_BIND_HOST=127.0.0.1
 
 ## Current Focus
 
-The current focus is to harden the bridge/executor workflow and stabilize the first low-level mutation tools for timeline and media-pool automation.
+The current focus is to harden the bridge/executor workflow, keep the low-level Resolve mutation surface stable, and use the local media-analysis layer to prepare higher-level rough-cut workflows without bypassing the backend contracts.

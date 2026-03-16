@@ -248,28 +248,12 @@ If your MCP client supports Streamable HTTP, point it to:
 http://localhost:8000/mcp
 ```
 
-The current tools are:
+The current tool surface is split into four groups:
 
-- `resolve_health`
-- `project_current`
-- `project_list`
-- `project_open`
-- `timeline_list`
-- `timeline_current`
-- `timeline_create_empty`
-- `timeline_set_current`
-- `timeline_append_clips`
-- `timeline_create_from_clips`
-- `timeline_items_list`
-- `media_pool_list`
-- `media_pool_folder_open`
-- `media_pool_folder_create`
-- `media_pool_folder_up`
-- `media_clip_inspect`
-- `media_import`
-- `marker_add`
-- `marker_list`
-- `marker_delete`
+- Resolve/project tools: `resolve_health`, `project_current`, `project_list`, `project_manager_folder_list`, `project_manager_folder_open`, `project_manager_folder_up`, `project_manager_folder_path`, `project_open`
+- Media pool tools: `media_pool_list`, `media_pool_folder_open`, `media_pool_folder_create`, `media_pool_folder_up`, `media_pool_folder_root`, `media_pool_folder_path`, `media_pool_folder_list_recursive`, `media_pool_folder_open_path`, `media_import`, `media_clip_inspect`, `media_clip_inspect_path`
+- Timeline and marker tools: `timeline_list`, `timeline_current`, `timeline_create_empty`, `timeline_set_current`, `timeline_append_clips`, `timeline_clips_place`, `timeline_create_from_clips`, `timeline_build_from_paths`, `timeline_items_list`, `timeline_inspect`, `timeline_track_items_list`, `timeline_track_inspect`, `timeline_item_inspect`, `timeline_item_delete`, `timeline_item_move`, `timeline_item_split`, `timeline_item_set_source_range`, `timeline_gap_close`, `timeline_remove_gaps`, `timeline_insert_gap`, `marker_add`, `marker_list`, `marker_inspect`, `marker_list_range`, `marker_delete`
+- Local media-analysis tools: `audio_probe`, `audio_transcribe_segments`, `audio_detect_events`, `video_probe`, `video_detect_shots`, `video_sample_frames`, `video_extract_roi_frames`, `video_build_contact_sheet`, `video_detect_overlay_events`, `video_extract_segment_screenshots`, `video_segment_from_speech`, `video_segment_visual`, `video_segment_audio_visual`, `edit_plan_from_candidates`
 
 ## 6. Connect to Codex Desktop
 
@@ -290,6 +274,7 @@ Practical checklist:
    - `project_list`
    - `project_open`
    - `timeline_list`
+   - `audio_probe`
 
 If your build uses the shared Codex config file instead of an in-app form, configure the MCP server there to use the same URL.
 
@@ -401,6 +386,15 @@ Recommended public MCP smoke for the new low-level toolset:
 7. `marker_list`
 8. `marker_delete`
 9. `timeline_items_list`
+
+Recommended smoke for the local media-analysis layer:
+
+1. `audio_probe` on a known local media file
+2. `video_probe` on a known local media file
+3. `video_detect_shots`
+4. `video_sample_frames`
+5. `video_build_contact_sheet`
+6. `edit_plan_from_candidates` with a tiny synthetic candidate list
 
 ## Agent external scripting fallback
 
