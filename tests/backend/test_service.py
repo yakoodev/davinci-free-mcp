@@ -28,6 +28,23 @@ class FakeBridge(Bridge):
         return {"available": True, "adapter": "fake"}
 
 
+class SequenceBridge(Bridge):
+    def __init__(self, results: list[BridgeResult]) -> None:
+        self._results = list(results)
+        self.commands: list[BridgeCommand] = []
+
+    def submit_command(self, command: BridgeCommand) -> str:
+        self.commands.append(command)
+        return command.request_id
+
+    def await_result(self, request_id: str, timeout_ms: int) -> BridgeResult:
+        result = self._results.pop(0)
+        return result.model_copy(update={"request_id": request_id})
+
+    def health_check(self) -> dict[str, object]:
+        return {"available": True, "adapter": "sequence"}
+
+
 def _write_wav(path: Path, amplitudes: list[int], frame_rate: int = 8000) -> None:
     with wave.open(str(path), "wb") as wav_file:
         wav_file.setnchannels(1)
@@ -416,6 +433,208 @@ def test_timeline_item_move_normalizes_invalid_executor_payload() -> None:
     assert result.success is False
     assert result.error is not None
     assert result.error.category == "execution_failure"
+
+
+def test_timeline_item_properties_get_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "item": {
+                        "item_index": 0,
+                        "name": "clip001.mov",
+                        "track_type": "video",
+                        "track_index": 1,
+                        "start_frame": 100,
+                        "end_frame": 124,
+                    },
+                    "properties": [],
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.timeline_item_properties_get("video", 1, 0)
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
+def test_timeline_item_properties_set_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "updated": True,
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "item": {
+                        "item_index": 0,
+                        "name": "clip001.mov",
+                        "track_type": "video",
+                        "track_index": 1,
+                        "start_frame": 100,
+                        "end_frame": 124,
+                    },
+                    "properties": "bad",
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.timeline_item_properties_set("video", 1, 0, {"Opacity": 80})
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
+def test_timeline_item_animation_preset_apply_normalizes_invalid_executor_payload() -> None:
+    service = ResolveBackendService(
+        FakeBridge(
+            BridgeResult.success(
+                "req-1",
+                data={
+                    "applied": True,
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "item": {
+                        "item_index": 0,
+                        "name": "clip001.mov",
+                        "track_type": "video",
+                        "track_index": 1,
+                        "start_frame": 100,
+                        "end_frame": 124,
+                    },
+                    "applied_preset": "fade_in",
+                    "fusion_comp_name": "DFMCP Anim",
+                    "properties": "bad",
+                },
+            )
+        ),
+        AppSettings(),
+    )
+
+    result = service.timeline_item_animation_preset_apply("video", 1, 0, "fade_in")
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "execution_failure"
+
+
+def test_timeline_image_place_animated_orchestrates_import_place_and_animation() -> None:
+    bridge = SequenceBridge(
+        [
+            BridgeResult.success(
+                "req-1",
+                data={"imported_count": 1, "items": [{"name": "image.png"}]},
+            ),
+            BridgeResult.success(
+                "req-2",
+                data={
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "placed_count": 1,
+                    "items": [
+                        {
+                            "item_index": None,
+                            "name": "image.png",
+                            "track_type": "video",
+                            "track_index": 2,
+                            "start_frame": 100,
+                            "end_frame": 140,
+                        }
+                    ],
+                },
+            ),
+            BridgeResult.success(
+                "req-3",
+                data={
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "track": {
+                        "track_type": "video",
+                        "track_index": 2,
+                        "items": [
+                            {
+                                "item_index": 3,
+                                "name": "image.png",
+                                "start_frame": 100,
+                                "end_frame": 140,
+                            }
+                        ],
+                    },
+                },
+            ),
+            BridgeResult.success(
+                "req-4",
+                data={
+                    "updated": True,
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "item": {
+                        "item_index": 3,
+                        "name": "image.png",
+                        "track_type": "video",
+                        "track_index": 2,
+                        "start_frame": 100,
+                        "end_frame": 140,
+                    },
+                    "properties": {"Opacity": 80.0, "ZoomX": 1.1, "ZoomY": 1.1},
+                },
+            ),
+            BridgeResult.success(
+                "req-5",
+                data={
+                    "applied": True,
+                    "project": {"open": True, "name": "Demo Project"},
+                    "timeline": {"index": 1, "name": "Assembly"},
+                    "item": {
+                        "item_index": 3,
+                        "name": "image.png",
+                        "track_type": "video",
+                        "track_index": 2,
+                        "start_frame": 100,
+                        "end_frame": 140,
+                    },
+                    "applied_preset": "fade_in",
+                    "fusion_comp_name": "DFMCP Anim",
+                    "properties": {"Opacity": 80.0, "ZoomX": 1.1, "ZoomY": 1.1},
+                },
+            ),
+        ]
+    )
+    service = ResolveBackendService(bridge, AppSettings())
+
+    result = service.timeline_image_place_animated(
+        "C:/media/image.png",
+        100,
+        2,
+        40,
+        "fade_in",
+        opacity=80.0,
+        scale=1.1,
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert result.data["imported_count"] == 1
+    assert result.data["item"]["item_index"] == 3
+    assert result.data["applied_preset"] == "fade_in"
+    assert [command.command for command in bridge.commands] == [
+        "media_import",
+        "timeline_clips_place",
+        "timeline_track_items_list",
+        "timeline_item_properties_set",
+        "timeline_item_animation_preset_apply",
+    ]
 
 
 def test_timeline_item_split_normalizes_invalid_executor_payload() -> None:
@@ -963,3 +1182,155 @@ def test_audio_detect_events_returns_events_for_wav(tmp_path: Path) -> None:
     assert result.data is not None
     assert len(result.data["events"]) >= 2
     assert "summary" in result.data
+
+
+def test_video_sample_frames_creates_frame_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    video_path = tmp_path / "clip.mp4"
+    video_path.write_bytes(b"fake-video")
+    video_path.with_name("clip.mp4.probe.json").write_text(
+        json.dumps({"duration_sec": 2.0, "video_codec": "h264"}),
+        encoding="utf-8",
+    )
+    import davinci_free_mcp.backend.media_analysis as media_analysis_module
+
+    monkeypatch.setattr(media_analysis_module.shutil, "which", lambda _: None)
+    service = ResolveBackendService(
+        FakeBridge(BridgeResult.success("req-1", data={})),
+        AppSettings(runtime_dir=tmp_path / "runtime"),
+    )
+
+    result = service.video_sample_frames(str(video_path), start=0.0, end=1.0, fps=2.0)
+
+    assert result.success is True
+    assert result.data is not None
+    assert len(result.data["frames"]) == 3
+    assert Path(result.data["frames"][0]["path"]).exists()
+    assert result.data["frames_dir"].endswith("frames")
+
+
+def test_video_extract_roi_frames_validates_positive_dimensions(tmp_path: Path) -> None:
+    video_path = tmp_path / "clip.mp4"
+    video_path.write_bytes(b"fake-video")
+    service = ResolveBackendService(
+        FakeBridge(BridgeResult.success("req-1", data={})),
+        AppSettings(runtime_dir=tmp_path / "runtime"),
+    )
+
+    result = service.video_extract_roi_frames(
+        str(video_path),
+        x=0,
+        y=0,
+        width=0,
+        height=100,
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
+def test_video_build_contact_sheet_creates_html_sheet(tmp_path: Path) -> None:
+    video_path = tmp_path / "clip.mp4"
+    video_path.write_bytes(b"fake-video")
+    frames_dir = tmp_path / "frames"
+    frames_dir.mkdir()
+    frame_paths = []
+    for index in range(3):
+        frame_path = frames_dir / f"frame_{index:04d}.jpg"
+        frame_path.write_bytes(f"frame-{index}".encode("utf-8"))
+        frame_paths.append(frame_path)
+    (tmp_path / "frames.json").write_text(
+        json.dumps(
+            {
+                "frames": [
+                    {
+                        "frame_index": index,
+                        "timestamp_sec": float(index),
+                        "path": str(frame_path),
+                    }
+                    for index, frame_path in enumerate(frame_paths)
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    service = ResolveBackendService(
+        FakeBridge(BridgeResult.success("req-1", data={})),
+        AppSettings(runtime_dir=tmp_path / "runtime"),
+    )
+
+    result = service.video_build_contact_sheet(str(video_path), frames_dir=str(frames_dir), columns=2, rows=2)
+
+    assert result.success is True
+    assert result.data is not None
+    assert len(result.data["sheets"]) == 1
+    assert Path(result.data["sheets"][0]["path"]).exists()
+
+
+def test_video_detect_overlay_events_groups_changed_frames(tmp_path: Path) -> None:
+    video_path = tmp_path / "clip.mp4"
+    video_path.write_bytes(b"fake-video")
+    frames_dir = tmp_path / "frames"
+    frames_dir.mkdir()
+    payloads = [b"a", b"a", b"b", b"b", b"c"]
+    frame_paths = []
+    for index, payload in enumerate(payloads):
+        frame_path = frames_dir / f"frame_{index:04d}.jpg"
+        frame_path.write_bytes(payload)
+        frame_paths.append(frame_path)
+    (tmp_path / "frames.json").write_text(
+        json.dumps(
+            {
+                "frames": [
+                    {
+                        "frame_index": index,
+                        "timestamp_sec": index * 0.5,
+                        "path": str(frame_path),
+                    }
+                    for index, frame_path in enumerate(frame_paths)
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    service = ResolveBackendService(
+        FakeBridge(BridgeResult.success("req-1", data={})),
+        AppSettings(runtime_dir=tmp_path / "runtime"),
+    )
+
+    result = service.video_detect_overlay_events(
+        str(video_path),
+        frames_dir=str(frames_dir),
+        min_event_gap_sec=0.4,
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert len(result.data["events"]) == 2
+    assert result.data["events"][0]["reason"] == "frame_change"
+
+
+def test_edit_plan_from_candidates_merges_close_events() -> None:
+    service = ResolveBackendService(
+        FakeBridge(BridgeResult.success("req-1", data={})),
+        AppSettings(),
+    )
+
+    result = service.edit_plan_from_candidates(
+        source_path="C:/videos/demo.mp4",
+        target_timeline_name="Review",
+        candidates=[
+            {"time_sec": 10.0, "confidence": 0.8, "label": "First"},
+            {"time_sec": 10.5, "confidence": 0.9, "label": "Second"},
+            {"time_sec": 20.0, "confidence": 0.7, "label": "Third"},
+        ],
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert len(result.data["segments"]) == 2
+    assert result.data["candidates"][1]["label"] == "Second"
+    assert result.data["segments"][0]["label"] == "Second"

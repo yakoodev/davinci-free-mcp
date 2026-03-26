@@ -1,12 +1,24 @@
 from davinci_free_mcp.contracts import (
+    AnimationDirectionName,
+    AnimationEasingName,
+    AnimationPresetName,
     AudioEventsData,
     AudioProbeData,
     AudioTranscriptionData,
+    ContactSheetSummary,
+    EditPlanCandidateEvent,
+    EditPlanFromCandidatesInput,
     EditPlanProposal,
+    ModuleDescriptor,
+    OverlayEventCandidate,
+    SampledVideoFrame,
     TranscriptSidecarData,
     BridgeCommand,
     BridgeResult,
+    VideoContactSheetData,
+    VideoOverlayEventsData,
     VideoSegmentationData,
+    VideoSampleFramesData,
     VideoShotsData,
     ResolveMarkerInspectData,
     ResolveMarkerRangeListData,
@@ -16,10 +28,15 @@ from davinci_free_mcp.contracts import (
     ResolveProjectManagerFolderStateData,
     ResolveTimelineClipsPlaceData,
     ResolveTimelineBuildFromPathsData,
+    ResolveTimelineImagePlaceAnimatedData,
     ResolveTimelineInspectData,
+    ResolveTimelineItemAnimationClearData,
+    ResolveTimelineItemAnimationPresetApplyData,
     ResolveTimelineItemDeleteData,
     ResolveTimelineItemInspectData,
     ResolveTimelineItemMoveData,
+    ResolveTimelineItemPropertiesData,
+    ResolveTimelineItemPropertiesSetData,
     ResolveTimelineTrackInspectData,
     ResolveTimelineTrackItemsData,
 )
@@ -343,12 +360,154 @@ def test_timeline_item_move_data_round_trip() -> None:
     assert restored.item.track_index == 2
 
 
+def test_timeline_item_properties_data_round_trip() -> None:
+    payload = ResolveTimelineItemPropertiesData.model_validate(
+        {
+            "project": {"open": True, "name": "Demo Project"},
+            "timeline": {"index": 1, "name": "Assembly"},
+            "item": {
+                "item_index": 0,
+                "name": "clip001.mov",
+                "track_type": "video",
+                "track_index": 1,
+                "start_frame": 10,
+                "end_frame": 40,
+            },
+            "properties": {"Opacity": 100.0, "ZoomX": 1.1, "CompositeMode": 0},
+        }
+    )
+
+    restored = ResolveTimelineItemPropertiesData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.properties["Opacity"] == 100.0
+    assert restored.properties["CompositeMode"] == 0
+
+
+def test_timeline_item_properties_set_data_round_trip() -> None:
+    payload = ResolveTimelineItemPropertiesSetData.model_validate(
+        {
+            "updated": True,
+            "project": {"open": True, "name": "Demo Project"},
+            "timeline": {"index": 1, "name": "Assembly"},
+            "item": {
+                "item_index": 0,
+                "name": "clip001.mov",
+                "track_type": "video",
+                "track_index": 1,
+                "start_frame": 10,
+                "end_frame": 40,
+            },
+            "properties": {"Opacity": 60.0, "ZoomY": 1.2},
+        }
+    )
+
+    restored = ResolveTimelineItemPropertiesSetData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.updated is True
+    assert restored.properties["ZoomY"] == 1.2
+
+
+def test_timeline_item_animation_apply_data_round_trip() -> None:
+    payload = ResolveTimelineItemAnimationPresetApplyData.model_validate(
+        {
+            "applied": True,
+            "project": {"open": True, "name": "Demo Project"},
+            "timeline": {"index": 1, "name": "Assembly"},
+            "item": {
+                "item_index": 0,
+                "name": "clip001.mov",
+                "track_type": "video",
+                "track_index": 1,
+                "start_frame": 10,
+                "end_frame": 40,
+            },
+            "applied_preset": "fade_in",
+            "fusion_comp_name": "DFMCP Anim",
+            "properties": {"Opacity": 100.0},
+        }
+    )
+
+    restored = ResolveTimelineItemAnimationPresetApplyData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.applied_preset == "fade_in"
+    assert restored.fusion_comp_name == "DFMCP Anim"
+
+
+def test_timeline_item_animation_clear_data_round_trip() -> None:
+    payload = ResolveTimelineItemAnimationClearData.model_validate(
+        {
+            "cleared": True,
+            "project": {"open": True, "name": "Demo Project"},
+            "timeline": {"index": 1, "name": "Assembly"},
+            "item": {
+                "item_index": 0,
+                "name": "clip001.mov",
+                "track_type": "video",
+                "track_index": 1,
+                "start_frame": 10,
+                "end_frame": 40,
+            },
+            "fusion_comp_name": "DFMCP Anim",
+        }
+    )
+
+    restored = ResolveTimelineItemAnimationClearData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.cleared is True
+    assert restored.fusion_comp_name == "DFMCP Anim"
+
+
+def test_timeline_image_place_animated_data_round_trip() -> None:
+    payload = ResolveTimelineImagePlaceAnimatedData.model_validate(
+        {
+            "imported_count": 1,
+            "project": {"open": True, "name": "Demo Project"},
+            "timeline": {"index": 1, "name": "Assembly"},
+            "item": {
+                "item_index": 0,
+                "name": "image.png",
+                "track_type": "video",
+                "track_index": 2,
+                "start_frame": 100,
+                "end_frame": 140,
+            },
+            "applied_preset": "zoom_in_soft",
+            "fusion_comp_name": "DFMCP Anim",
+            "properties": {"ZoomX": 1.1, "ZoomY": 1.1},
+        }
+    )
+
+    restored = ResolveTimelineImagePlaceAnimatedData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.imported_count == 1
+    assert restored.applied_preset == "zoom_in_soft"
+
+
+def test_animation_literal_values_validate() -> None:
+    preset: AnimationPresetName = "fade_in"
+    easing: AnimationEasingName = "ease_in_out"
+    direction: AnimationDirectionName = "left"
+
+    assert preset == "fade_in"
+    assert easing == "ease_in_out"
+    assert direction == "left"
+
+
 def test_edit_plan_proposal_round_trip() -> None:
     payload = EditPlanProposal.model_validate(
         {
             "source_path": "C:/videos/cs2/demo.mp4",
             "target_timeline_name": "CS2 Frags",
             "summary": "3 candidate highlight cuts based on speech and impact peaks.",
+            "candidates": [
+                {
+                    "time_sec": 13.1,
+                    "confidence": 0.92,
+                    "label": "Entry frag candidate",
+                    "reason": "overlay_change",
+                    "artifacts": ["C:/runtime/analysis/abc/frame_0001.jpg"],
+                }
+            ],
             "segments": [
                 {
                     "start": 12.4,
@@ -387,8 +546,134 @@ def test_edit_plan_proposal_round_trip() -> None:
     restored = EditPlanProposal.model_validate(payload.model_dump(mode="json"))
 
     assert restored.target_timeline_name == "CS2 Frags"
+    assert restored.candidates[0].label == "Entry frag candidate"
     assert restored.operations[0].tool_name == "timeline_clips_place"
     assert restored.segments[0].score == 0.91
+
+
+def test_module_descriptor_round_trip() -> None:
+    payload = ModuleDescriptor.model_validate(
+        {
+            "module_id": "template_custom",
+            "display_name": "Template Custom Module",
+            "enabled_by_default": False,
+            "kind": "template",
+            "tools": ["template_custom_module_info"],
+        }
+    )
+
+    restored = ModuleDescriptor.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.module_id == "template_custom"
+    assert restored.kind == "template"
+
+
+def test_video_sample_frames_data_round_trip() -> None:
+    payload = VideoSampleFramesData.model_validate(
+        {
+            "source": "C:/media/test.mp4",
+            "analysis_id": "abc123",
+            "artifacts_dir": "C:/runtime/analysis/abc123",
+            "frames_dir": "C:/runtime/analysis/abc123/frames",
+            "fps": 2.0,
+            "start": 1.0,
+            "end": 2.0,
+            "frames": [
+                {
+                    "frame_index": 0,
+                    "timestamp_sec": 1.0,
+                    "path": "C:/runtime/analysis/abc123/frames/frame_0000.jpg",
+                }
+            ],
+            "artifacts": [{"kind": "json", "path": "C:/runtime/analysis/abc123/frames.json", "label": "frames"}],
+        }
+    )
+
+    restored = VideoSampleFramesData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.frames[0].timestamp_sec == 1.0
+    assert restored.fps == 2.0
+
+
+def test_video_contact_sheet_data_round_trip() -> None:
+    payload = VideoContactSheetData.model_validate(
+        {
+            "source": "C:/media/test.mp4",
+            "analysis_id": "abc123",
+            "artifacts_dir": "C:/runtime/analysis/abc123",
+            "frames_dir": "C:/runtime/analysis/abc123/frames",
+            "sheets": [
+                {
+                    "sheet_index": 0,
+                    "path": "C:/runtime/analysis/abc123/contact_sheet_00.html",
+                    "columns": 4,
+                    "rows": 4,
+                    "frame_count": 8,
+                }
+            ],
+            "artifacts": [{"kind": "text", "path": "C:/runtime/analysis/abc123/contact_sheet_00.html", "label": "contact_sheet_0"}],
+        }
+    )
+
+    restored = VideoContactSheetData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.sheets[0].columns == 4
+    assert restored.sheets[0].frame_count == 8
+
+
+def test_video_overlay_events_data_round_trip() -> None:
+    payload = VideoOverlayEventsData.model_validate(
+        {
+            "source": "C:/media/test.mp4",
+            "analysis_id": "abc123",
+            "artifacts_dir": "C:/runtime/analysis/abc123",
+            "frames_dir": "C:/runtime/analysis/abc123/frames",
+            "events": [
+                {
+                    "event_index": 0,
+                    "start": 2.0,
+                    "end": 2.5,
+                    "confidence": 0.5,
+                    "label": "Overlay change candidate 1",
+                    "artifacts": ["C:/runtime/analysis/abc123/frames/frame_0001.jpg"],
+                    "reason": "frame_change",
+                }
+            ],
+            "artifacts": [{"kind": "json", "path": "C:/runtime/analysis/abc123/events.json", "label": "events"}],
+        }
+    )
+
+    restored = VideoOverlayEventsData.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.events[0].reason == "frame_change"
+
+
+def test_edit_plan_from_candidates_input_round_trip() -> None:
+    payload = EditPlanFromCandidatesInput.model_validate(
+        {
+            "source_path": "C:/videos/cs2/demo.mp4",
+            "target_timeline_name": "Review",
+            "candidates": [
+                {
+                    "time_sec": 14.2,
+                    "confidence": 0.88,
+                    "label": "Multi-kill",
+                    "reason": "overlay_change",
+                    "artifacts": ["C:/runtime/frame_0010.jpg"],
+                }
+            ],
+            "pre_roll_sec": 1.5,
+            "post_roll_sec": 2.0,
+            "min_segment_sec": 2.5,
+            "max_segment_sec": 6.0,
+            "merge_gap_sec": 1.0,
+        }
+    )
+
+    restored = EditPlanFromCandidatesInput.model_validate(payload.model_dump(mode="json"))
+
+    assert restored.candidates[0].time_sec == 14.2
+    assert restored.post_roll_sec == 2.0
 
 
 def test_audio_probe_data_round_trip() -> None:

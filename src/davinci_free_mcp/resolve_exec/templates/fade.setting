@@ -1,0 +1,23 @@
+{
+Tools = ordered() {
+    MediaIn1 = MediaIn { Inputs = {}, ViewInfo = OperatorInfo { Pos = { 0, 0 } } },
+    Background1 = Background { Inputs = { GlobalOut = Input { Value = __DURATION__ } }, ViewInfo = OperatorInfo { Pos = { 110, 0 } } },
+    Merge1 = Merge {
+        Inputs = {
+            Background = Input { SourceOp = "Background1", Source = "Output" },
+            Foreground = Input { SourceOp = "MediaIn1", Source = "Output" },
+            Blend = Input { SourceOp = "BlendSpline", Source = "Value" }
+        },
+        ViewInfo = OperatorInfo { Pos = { 220, 0 } }
+    },
+    MediaOut1 = MediaOut { Inputs = { Input = Input { SourceOp = "Merge1", Source = "Output" } }, ViewInfo = OperatorInfo { Pos = { 330, 0 } } },
+    BlendSpline = BezierSpline {
+        SplineColor = { Red = 255, Green = 196, Blue = 0 },
+        NameSet = true,
+        KeyFrames = {
+            [0] = { __START_VALUE__ },
+            [__MID_DURATION__] = { __END_VALUE__ }
+        }
+    }
+}
+}

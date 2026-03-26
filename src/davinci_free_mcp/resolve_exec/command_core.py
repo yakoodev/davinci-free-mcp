@@ -5,6 +5,100 @@ installer embeds its source into the Resolve bootstrap script.
 """
 
 import copy
+import os
+import tempfile
+
+
+DFMCP_ANIMATION_COMP_NAME = "DFMCP Anim"
+DFMCP_ANIMATION_COMP_PREFIX = "DFMCP "
+SUPPORTED_TIMELINE_ITEM_PROPERTIES = {
+    "Opacity": "float",
+    "ZoomX": "float",
+    "ZoomY": "float",
+    "Pan": "float",
+    "Tilt": "float",
+    "RotationAngle": "float",
+    "CompositeMode": "int",
+    "CropLeft": "float",
+    "CropRight": "float",
+    "CropTop": "float",
+    "CropBottom": "float",
+}
+SUPPORTED_ANIMATION_PRESETS = (
+    "fade_in",
+    "fade_out",
+    "fade_in_out",
+    "zoom_in_soft",
+    "zoom_out_soft",
+    "slide_up_fade",
+    "slide_down_fade",
+    "slide_left_fade",
+    "slide_right_fade",
+)
+SUPPORTED_ANIMATION_DIRECTIONS = ("up", "down", "left", "right", "in", "out")
+SUPPORTED_ANIMATION_EASINGS = ("linear", "ease_in", "ease_out", "ease_in_out")
+FALLBACK_FADE_TEMPLATE = """{
+Tools = ordered() {
+    MediaIn1 = MediaIn { Inputs = {}, ViewInfo = OperatorInfo { Pos = { 0, 0 } } },
+    Background1 = Background { Inputs = { GlobalOut = Input { Value = __DURATION__ } }, ViewInfo = OperatorInfo { Pos = { 110, 0 } } },
+    Merge1 = Merge {
+        Inputs = {
+            Background = Input { SourceOp = "Background1", Source = "Output" },
+            Foreground = Input { SourceOp = "MediaIn1", Source = "Output" },
+            Blend = Input { SourceOp = "BlendSpline", Source = "Value" }
+        },
+        ViewInfo = OperatorInfo { Pos = { 220, 0 } }
+    },
+    MediaOut1 = MediaOut { Inputs = { Input = Input { SourceOp = "Merge1", Source = "Output" } }, ViewInfo = OperatorInfo { Pos = { 330, 0 } } },
+    BlendSpline = BezierSpline {
+        SplineColor = { Red = 255, Green = 196, Blue = 0 },
+        NameSet = true,
+        KeyFrames = {
+            [0] = { __START_VALUE__ },
+            [__MID_DURATION__] = { __END_VALUE__ }
+        }
+    }
+}
+}"""
+FALLBACK_TRANSFORM_TEMPLATE = """{
+Tools = ordered() {
+    MediaIn1 = MediaIn { Inputs = {}, ViewInfo = OperatorInfo { Pos = { 0, 0 } } },
+    Background1 = Background { Inputs = { GlobalOut = Input { Value = __DURATION__ } }, ViewInfo = OperatorInfo { Pos = { 110, 0 } } },
+    Transform1 = Transform {
+        Inputs = {
+            Input = Input { SourceOp = "MediaIn1", Source = "Output" },
+            Size = Input { SourceOp = "SizeSpline", Source = "Value" },
+            Center = Input { Value = { __CENTER_X__, __CENTER_Y__ } }
+        },
+        ViewInfo = OperatorInfo { Pos = { 220, 0 } }
+    },
+    Merge1 = Merge {
+        Inputs = {
+            Background = Input { SourceOp = "Background1", Source = "Output" },
+            Foreground = Input { SourceOp = "Transform1", Source = "Output" },
+            Blend = Input { SourceOp = "BlendSpline", Source = "Value" }
+        },
+        ViewInfo = OperatorInfo { Pos = { 330, 0 } }
+    },
+    MediaOut1 = MediaOut { Inputs = { Input = Input { SourceOp = "Merge1", Source = "Output" } }, ViewInfo = OperatorInfo { Pos = { 440, 0 } } },
+    BlendSpline = BezierSpline {
+        SplineColor = { Red = 255, Green = 196, Blue = 0 },
+        NameSet = true,
+        KeyFrames = {
+            [0] = { __START_OPACITY__ },
+            [__MID_DURATION__] = { __END_OPACITY__ }
+        }
+    },
+    SizeSpline = BezierSpline {
+        SplineColor = { Red = 0, Green = 170, Blue = 255 },
+        NameSet = true,
+        KeyFrames = {
+            [0] = { __START_SCALE__ },
+            [__MID_DURATION__] = { __END_SCALE__ }
+        }
+    }
+}
+}"""
 
 
 def execute_resolve_command(command, resolve_provider, adapter_name="file_queue"):
@@ -53,6 +147,10 @@ class ResolveCommandCore(object):
             "timeline_track_inspect": self._handle_timeline_track_inspect,
             "timeline_item_inspect": self._handle_timeline_item_inspect,
             "timeline_item_delete": self._handle_timeline_item_delete,
+            "timeline_item_properties_get": self._handle_timeline_item_properties_get,
+            "timeline_item_properties_set": self._handle_timeline_item_properties_set,
+            "timeline_item_animation_preset_apply": self._handle_timeline_item_animation_preset_apply,
+            "timeline_item_animation_clear": self._handle_timeline_item_animation_clear,
             "timeline_item_move": self._handle_timeline_item_move,
             "timeline_item_split": self._handle_timeline_item_split,
             "timeline_item_set_source_range": self._handle_timeline_item_set_source_range,
@@ -1718,6 +1816,287 @@ class ResolveCommandCore(object):
             },
         )
 
+    def _handle_timeline_item_properties_get(self, command, resolve):
+        item_data, failure = self._resolve_timeline_item(command, resolve)
+        if failure is not None:
+            return failure
+
+        item = item_data["item"]
+        if item_data["track_type"] != "video":
+            return self._failure(
+                command["request_id"],
+                "unsupported_in_free_mode",
+                "Timeline item properties are only supported for video items in v1.",
+            )
+
+        return self._success(
+            command["request_id"],
+            data={
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(item_data["project"], "GetName"),
+                },
+                "timeline": self._timeline_summary(item_data["project"], item_data["timeline"]),
+                "item": self._timeline_item_summary(
+                    item,
+                    item_index=item_data["item_index"],
+                    track_type=item_data["track_type"],
+                    track_index=item_data["track_index"],
+                ),
+                "properties": self._read_supported_item_properties(item),
+            },
+        )
+
+    def _handle_timeline_item_properties_set(self, command, resolve):
+        item_data, failure = self._resolve_timeline_item(command, resolve)
+        if failure is not None:
+            return failure
+
+        item = item_data["item"]
+        if item_data["track_type"] != "video":
+            return self._failure(
+                command["request_id"],
+                "unsupported_in_free_mode",
+                "Timeline item properties are only supported for video items in v1.",
+            )
+
+        properties = command["payload"].get("properties")
+        if not isinstance(properties, dict) or not properties:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Properties payload must be a non-empty object.",
+            )
+
+        normalized_properties = {}
+        for key, raw_value in properties.items():
+            property_key = str(key)
+            if property_key not in SUPPORTED_TIMELINE_ITEM_PROPERTIES:
+                return self._failure(
+                    command["request_id"],
+                    "validation_error",
+                    "Unsupported timeline item property '%s'." % property_key,
+                    details={"property": property_key},
+                )
+            normalized_value, value_error = self._normalize_timeline_item_property_value(
+                property_key,
+                raw_value,
+            )
+            if value_error is not None:
+                return self._failure(
+                    command["request_id"],
+                    "validation_error",
+                    value_error,
+                    details={"property": property_key, "value": raw_value},
+                )
+            applied = self._safe_call(item, "SetProperty", property_key, normalized_value)
+            if not applied:
+                return self._failure(
+                    command["request_id"],
+                    "execution_failure",
+                    "Resolve failed to set timeline item property '%s'." % property_key,
+                    details={"property": property_key, "value": normalized_value},
+                )
+            normalized_properties[property_key] = normalized_value
+
+        return self._success(
+            command["request_id"],
+            data={
+                "updated": True,
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(item_data["project"], "GetName"),
+                },
+                "timeline": self._timeline_summary(item_data["project"], item_data["timeline"]),
+                "item": self._timeline_item_summary(
+                    item,
+                    item_index=item_data["item_index"],
+                    track_type=item_data["track_type"],
+                    track_index=item_data["track_index"],
+                ),
+                "properties": self._read_supported_item_properties(item),
+            },
+        )
+
+    def _handle_timeline_item_animation_preset_apply(self, command, resolve):
+        item_data, failure = self._resolve_timeline_item(command, resolve)
+        if failure is not None:
+            return failure
+
+        item = item_data["item"]
+        if item_data["track_type"] != "video":
+            return self._failure(
+                command["request_id"],
+                "unsupported_in_free_mode",
+                "Animation presets are only supported for video items in v1.",
+            )
+
+        preset = str(command["payload"].get("preset") or "").strip()
+        if preset not in SUPPORTED_ANIMATION_PRESETS:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Unsupported animation preset '%s'." % preset,
+                details={"preset": preset},
+            )
+
+        duration_frames = command["payload"].get("duration_frames")
+        if duration_frames is None:
+            duration_frames = 12
+        try:
+            duration_frames = int(duration_frames)
+        except (TypeError, ValueError):
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Animation duration_frames must be an integer when provided.",
+            )
+        if duration_frames < 1:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Animation duration_frames must be at least 1.",
+            )
+
+        intensity = command["payload"].get("intensity")
+        if intensity is None:
+            intensity = 1.0
+        try:
+            intensity = float(intensity)
+        except (TypeError, ValueError):
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Animation intensity must be numeric when provided.",
+            )
+        if intensity <= 0:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Animation intensity must be greater than 0.",
+            )
+
+        direction = command["payload"].get("direction")
+        if direction is None:
+            direction = self._default_animation_direction_for_preset(preset)
+        direction = str(direction)
+        if direction not in SUPPORTED_ANIMATION_DIRECTIONS:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Unsupported animation direction '%s'." % direction,
+                details={"direction": direction},
+            )
+
+        easing = command["payload"].get("easing")
+        if easing is None:
+            easing = "ease_in_out"
+        easing = str(easing)
+        if easing not in SUPPORTED_ANIMATION_EASINGS:
+            return self._failure(
+                command["request_id"],
+                "validation_error",
+                "Unsupported animation easing '%s'." % easing,
+                details={"easing": easing},
+            )
+
+        self._delete_dfmcp_animation_comps(item)
+        template_path = self._write_animation_template(
+            preset,
+            duration_frames,
+            intensity,
+            direction,
+            easing,
+        )
+        if template_path is None:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Failed to prepare the Fusion animation template.",
+            )
+
+        before_names = self._timeline_item_fusion_comp_names(item)
+        imported_comp = self._safe_call(item, "ImportFusionComp", template_path)
+        if imported_comp is None:
+            imported_comp = self._safe_call(item, "AddFusionComp")
+        after_names = self._timeline_item_fusion_comp_names(item)
+        resolved_name = self._resolve_new_fusion_comp_name(before_names, after_names)
+        if resolved_name is None and after_names:
+            resolved_name = after_names[-1]
+        if resolved_name is None and imported_comp is None:
+            return self._failure(
+                command["request_id"],
+                "execution_failure",
+                "Resolve failed to create a Fusion composition for the requested animation preset.",
+                details={"preset": preset},
+            )
+
+        if resolved_name and resolved_name != DFMCP_ANIMATION_COMP_NAME:
+            renamed = self._safe_call(
+                item,
+                "RenameFusionCompByName",
+                resolved_name,
+                DFMCP_ANIMATION_COMP_NAME,
+            )
+            if renamed:
+                resolved_name = DFMCP_ANIMATION_COMP_NAME
+        elif resolved_name is None:
+            resolved_name = DFMCP_ANIMATION_COMP_NAME
+
+        return self._success(
+            command["request_id"],
+            data={
+                "applied": True,
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(item_data["project"], "GetName"),
+                },
+                "timeline": self._timeline_summary(item_data["project"], item_data["timeline"]),
+                "item": self._timeline_item_summary(
+                    item,
+                    item_index=item_data["item_index"],
+                    track_type=item_data["track_type"],
+                    track_index=item_data["track_index"],
+                ),
+                "applied_preset": preset,
+                "fusion_comp_name": resolved_name,
+                "properties": self._read_supported_item_properties(item),
+            },
+        )
+
+    def _handle_timeline_item_animation_clear(self, command, resolve):
+        item_data, failure = self._resolve_timeline_item(command, resolve)
+        if failure is not None:
+            return failure
+
+        item = item_data["item"]
+        if item_data["track_type"] != "video":
+            return self._failure(
+                command["request_id"],
+                "unsupported_in_free_mode",
+                "Animation presets are only supported for video items in v1.",
+            )
+
+        removed_names = self._delete_dfmcp_animation_comps(item)
+        return self._success(
+            command["request_id"],
+            data={
+                "cleared": True,
+                "project": {
+                    "open": True,
+                    "name": self._safe_call(item_data["project"], "GetName"),
+                },
+                "timeline": self._timeline_summary(item_data["project"], item_data["timeline"]),
+                "item": self._timeline_item_summary(
+                    item,
+                    item_index=item_data["item_index"],
+                    track_type=item_data["track_type"],
+                    track_index=item_data["track_index"],
+                ),
+                "fusion_comp_name": removed_names[-1] if removed_names else None,
+            },
+        )
+
     def _handle_timeline_item_move(self, command, resolve):
         item_data, failure = self._resolve_timeline_item(command, resolve)
         if failure is not None:
@@ -2774,6 +3153,207 @@ class ResolveCommandCore(object):
             return method(*args)
         except Exception:
             return None
+
+    def _read_supported_item_properties(self, item):
+        properties = {}
+        for property_key in SUPPORTED_TIMELINE_ITEM_PROPERTIES:
+            raw_value = self._safe_call(item, "GetProperty", property_key)
+            normalized = self._normalize_property_output_value(raw_value)
+            if normalized is not None:
+                properties[property_key] = normalized
+        return properties
+
+    def _normalize_timeline_item_property_value(self, property_key, raw_value):
+        expected_type = SUPPORTED_TIMELINE_ITEM_PROPERTIES.get(property_key)
+        if expected_type == "int":
+            if isinstance(raw_value, bool):
+                return None, "Property '%s' does not accept boolean values." % property_key
+            try:
+                return int(raw_value), None
+            except (TypeError, ValueError):
+                return None, "Property '%s' must be an integer." % property_key
+        try:
+            return float(raw_value), None
+        except (TypeError, ValueError):
+            return None, "Property '%s' must be numeric." % property_key
+
+    def _normalize_property_output_value(self, raw_value):
+        if raw_value is None:
+            return None
+        if isinstance(raw_value, bool):
+            return raw_value
+        if isinstance(raw_value, int):
+            return int(raw_value)
+        if isinstance(raw_value, float):
+            return float(raw_value)
+        try:
+            if "." in str(raw_value):
+                return float(raw_value)
+            return int(raw_value)
+        except (TypeError, ValueError):
+            return str(raw_value)
+
+    def _default_animation_direction_for_preset(self, preset):
+        if preset == "zoom_in_soft":
+            return "in"
+        if preset == "zoom_out_soft":
+            return "out"
+        if preset.startswith("slide_"):
+            if "_up_" in preset:
+                return "up"
+            if "_down_" in preset:
+                return "down"
+            if "_left_" in preset:
+                return "left"
+            if "_right_" in preset:
+                return "right"
+        return "in"
+
+    def _timeline_item_fusion_comp_names(self, item):
+        names = self._safe_call(item, "GetFusionCompNameList")
+        if not isinstance(names, list):
+            names = self._safe_call(item, "GetFusionCompNames")
+        if not isinstance(names, list):
+            names = []
+        return [str(name) for name in names]
+
+    def _resolve_new_fusion_comp_name(self, before_names, after_names):
+        for name in after_names:
+            if name not in before_names:
+                return name
+        return None
+
+    def _delete_dfmcp_animation_comps(self, item):
+        removed_names = []
+        for comp_name in self._timeline_item_fusion_comp_names(item):
+            if not str(comp_name).startswith(DFMCP_ANIMATION_COMP_PREFIX):
+                continue
+            deleted = self._safe_call(item, "DeleteFusionCompByName", str(comp_name))
+            if deleted:
+                removed_names.append(str(comp_name))
+        return removed_names
+
+    def _write_animation_template(self, preset, duration_frames, intensity, direction, easing):
+        template_name = "fade.setting"
+        if preset not in ("fade_in", "fade_out", "fade_in_out"):
+            template_name = "transform.setting"
+
+        template = self._load_animation_template(template_name)
+        if not template:
+            return None
+
+        values = self._animation_template_values(
+            preset,
+            duration_frames,
+            intensity,
+            direction,
+            easing,
+        )
+        for key, value in values.items():
+            template = template.replace(key, value)
+
+        file_name = "dfmcp_%s_%s.setting" % (preset, os.getpid())
+        temp_path = os.path.join(tempfile.gettempdir(), file_name)
+        handle = None
+        try:
+            handle = open(temp_path, "w")
+            handle.write(template)
+            handle.close()
+        except Exception:
+            if handle is not None:
+                try:
+                    handle.close()
+                except Exception:
+                    pass
+            return None
+        return temp_path
+
+    def _load_animation_template(self, template_name):
+        template_path = self._repo_template_path(template_name)
+        if template_path and os.path.exists(template_path):
+            handle = None
+            try:
+                handle = open(template_path, "r")
+                data = handle.read()
+                handle.close()
+                return data
+            except Exception:
+                if handle is not None:
+                    try:
+                        handle.close()
+                    except Exception:
+                        pass
+        if template_name == "fade.setting":
+            return FALLBACK_FADE_TEMPLATE
+        return FALLBACK_TRANSFORM_TEMPLATE
+
+    def _repo_template_path(self, template_name):
+        repo_root = globals().get("REPO_ROOT")
+        if not repo_root:
+            repo_root = os.environ.get("DFMCP_REPO_ROOT")
+        if not repo_root:
+            repo_root = os.getcwd()
+        if not repo_root:
+            return None
+        return os.path.join(
+            repo_root,
+            "src",
+            "davinci_free_mcp",
+            "resolve_exec",
+            "templates",
+            template_name,
+        )
+
+    def _animation_template_values(self, preset, duration_frames, intensity, direction, easing):
+        mid_duration = max(1, int(duration_frames))
+        blend_start = "0"
+        blend_end = "1"
+        size_start = "1"
+        size_end = "1"
+        center_x = "0.5"
+        center_y = "0.5"
+
+        if preset == "fade_out":
+            blend_start = "1"
+            blend_end = "0"
+        elif preset == "fade_in_out":
+            mid_duration = max(1, int(duration_frames) // 2)
+        elif preset == "zoom_in_soft":
+            size_start = self._stringify_float(1.0 + (0.12 * intensity))
+            size_end = "1"
+        elif preset == "zoom_out_soft":
+            size_start = "1"
+            size_end = self._stringify_float(1.0 + (0.12 * intensity))
+
+        if preset.startswith("slide_"):
+            offset = 0.08 * intensity
+            if direction == "up":
+                center_y = self._stringify_float(0.5 + offset)
+            elif direction == "down":
+                center_y = self._stringify_float(0.5 - offset)
+            elif direction == "left":
+                center_x = self._stringify_float(0.5 + offset)
+            elif direction == "right":
+                center_x = self._stringify_float(0.5 - offset)
+
+        return {
+            "__DURATION__": str(max(1, int(duration_frames))),
+            "__MID_DURATION__": str(max(1, int(mid_duration))),
+            "__START_VALUE__": blend_start,
+            "__END_VALUE__": blend_end,
+            "__START_OPACITY__": blend_start,
+            "__END_OPACITY__": blend_end,
+            "__START_SCALE__": size_start,
+            "__END_SCALE__": size_end,
+            "__CENTER_X__": center_x,
+            "__CENTER_Y__": center_y,
+            "__EASING__": str(easing),
+        }
+
+    def _stringify_float(self, value):
+        text = "%.6f" % float(value)
+        text = text.rstrip("0").rstrip(".")
+        return text or "0"
 
     def _current_project(self, resolve):
         project_manager = self._safe_call(resolve, "GetProjectManager")

@@ -1,0 +1,39 @@
+{
+Tools = ordered() {
+    MediaIn1 = MediaIn { Inputs = {}, ViewInfo = OperatorInfo { Pos = { 0, 0 } } },
+    Background1 = Background { Inputs = { GlobalOut = Input { Value = __DURATION__ } }, ViewInfo = OperatorInfo { Pos = { 110, 0 } } },
+    Transform1 = Transform {
+        Inputs = {
+            Input = Input { SourceOp = "MediaIn1", Source = "Output" },
+            Size = Input { SourceOp = "SizeSpline", Source = "Value" },
+            Center = Input { Value = { __CENTER_X__, __CENTER_Y__ } }
+        },
+        ViewInfo = OperatorInfo { Pos = { 220, 0 } }
+    },
+    Merge1 = Merge {
+        Inputs = {
+            Background = Input { SourceOp = "Background1", Source = "Output" },
+            Foreground = Input { SourceOp = "Transform1", Source = "Output" },
+            Blend = Input { SourceOp = "BlendSpline", Source = "Value" }
+        },
+        ViewInfo = OperatorInfo { Pos = { 330, 0 } }
+    },
+    MediaOut1 = MediaOut { Inputs = { Input = Input { SourceOp = "Merge1", Source = "Output" } }, ViewInfo = OperatorInfo { Pos = { 440, 0 } } },
+    BlendSpline = BezierSpline {
+        SplineColor = { Red = 255, Green = 196, Blue = 0 },
+        NameSet = true,
+        KeyFrames = {
+            [0] = { __START_OPACITY__ },
+            [__MID_DURATION__] = { __END_OPACITY__ }
+        }
+    },
+    SizeSpline = BezierSpline {
+        SplineColor = { Red = 0, Green = 170, Blue = 255 },
+        NameSet = true,
+        KeyFrames = {
+            [0] = { __START_SCALE__ },
+            [__MID_DURATION__] = { __END_SCALE__ }
+        }
+    }
+}
+}

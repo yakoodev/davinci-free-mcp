@@ -4,6 +4,16 @@
 
 ## Unreleased
 
+- Добавлен v1 animation surface для timeline items: `timeline_item_properties_get`, `timeline_item_properties_set`, `timeline_item_animation_preset_apply`, `timeline_item_animation_clear` и composed tool `timeline_image_place_animated`.
+- Новый animation layer использует Fusion-backed preset apply/clear для smooth fade/zoom/slide сценариев и отдельный whitelist-based static property API для `Opacity`, `ZoomX/Y`, `Pan`, `Tilt`, `RotationAngle`, `CompositeMode` и `Crop*`.
+- Добавлены Fusion template assets, backend orchestration для import/place/animate workflow, contracts для animation payloads и тесты на property validation, audio rejection, idempotent preset apply и non-destructive animation clear.
+- `docker-compose.yml` теперь явно включает `core,cs2_clips` через `DFMCP_ENABLED_MODULES`, чтобы live MCP одновременно публиковал low-level Resolve tools и доменные `cs2_list_candidate_events` / `cs2_build_edit_plan`.
+- `cs2_clips` переведен на visual-first pipeline для CS2/NVIDIA клипов: модуль теперь сначала ищет kill-feed/cash HUD события через ROI-анализ кадров, затем добавляет audio/transcript boosts и только после этого строит candidate events и rough-cut proposals.
+- HUD-specific kill detector в `cs2_clips` дополнительно откалиброван под локальные NVIDIA CS2 записи: детекция теперь опирается на dark-banner/local-name peak heuristics без агрессивного `top-N`, а opt-in local regression-check покрывает три размеченных клипа с эталонными таймкодами `53/64`, `9/13/22/55` и `40/59/71/85/90`.
+- Добавлен локальный evaluator `scripts/cs2_eval_kills.py` и sample fixture format для ручной разметки kill-тестов и regression-прогонов по эталонным таймкодам.
+- Добавлена динамическая загрузка внешних MCP-модулей из `./modules_repos`: сервер сканирует дочерние repo с `plugin_module.py`, автоматически подключает валидные плагины, печатает warnings по битым/import-conflict модулям и оставляет builtin-модули приоритетными при конфликте `module_id`.
+- Skeleton-модуль `cs2_clips` заменен на рабочий transcript-first CS2 surface: `cs2_list_candidate_events` и `cs2_build_edit_plan` теперь поддерживают файл/директорию, переиспользуют `*.transcript.json`, умеют вызывать speech fallback и возвращают batch-friendly candidate/proposal payloads.
+- Эвристика CS2 highlight detection вынесена в shared helper и переиспользуется как модулем, так и `scripts/cs2_auto_kill_segments.py`; добавлены unit/integration tests для keyword scoring, шумных sidecar и plan-building flow.
 - Документация синхронизирована с текущим кодом: README, `docs/RUNNING.md`, `docs/README.ru.md` и `docs/TOOLS.md` теперь описывают полный актуальный MCP surface, локальный media-analysis слой и модульную систему.
 
 - Добавлена встроенная модульная система MCP под `src/davinci_free_mcp/modules/` со статическим registry/loader, `core` module, шаблоном `template_custom` и skeleton-модулем `cs2_clips`, включаемыми через `DFMCP_ENABLED_MODULES` и `DFMCP_DISABLED_MODULES`.

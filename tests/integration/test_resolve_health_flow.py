@@ -45,6 +45,20 @@ class FakeTimelineItem:
         self._source_end_frame = end_frame if source_end_frame is None else source_end_frame
         self._left_offset = left_offset
         self._right_offset = right_offset
+        self._properties = {
+            "Opacity": 100.0,
+            "ZoomX": 1.0,
+            "ZoomY": 1.0,
+            "Pan": 0.0,
+            "Tilt": 0.0,
+            "RotationAngle": 0.0,
+            "CompositeMode": 0,
+            "CropLeft": 0.0,
+            "CropRight": 0.0,
+            "CropTop": 0.0,
+            "CropBottom": 0.0,
+        }
+        self._fusion_comp_names: list[str] = []
 
     def GetName(self) -> str:
         return self._name
@@ -75,6 +89,42 @@ class FakeTimelineItem:
 
     def GetMediaPoolItem(self) -> FakeMediaPoolItem:
         return self._media_pool_item
+
+    def GetProperty(self, property_key: str | None = None):
+        if property_key is None:
+            return dict(self._properties)
+        return self._properties.get(property_key)
+
+    def SetProperty(self, property_key: str, property_value: object) -> bool:
+        if property_key not in self._properties:
+            return False
+        self._properties[property_key] = property_value
+        return True
+
+    def GetFusionCompNameList(self) -> list[str]:
+        return list(self._fusion_comp_names)
+
+    def AddFusionComp(self):
+        name = f"Composition {len(self._fusion_comp_names) + 1}"
+        self._fusion_comp_names.append(name)
+        return object()
+
+    def ImportFusionComp(self, path: str):
+        name = f"Imported Comp {len(self._fusion_comp_names) + 1}"
+        self._fusion_comp_names.append(name)
+        return object()
+
+    def RenameFusionCompByName(self, old_name: str, new_name: str) -> bool:
+        if old_name not in self._fusion_comp_names:
+            return False
+        self._fusion_comp_names[self._fusion_comp_names.index(old_name)] = new_name
+        return True
+
+    def DeleteFusionCompByName(self, comp_name: str) -> bool:
+        if comp_name not in self._fusion_comp_names:
+            return False
+        self._fusion_comp_names.remove(comp_name)
+        return True
 
     def invalidate(self) -> None:
         self._name = ""
@@ -1495,6 +1545,149 @@ def test_timeline_item_delete_removes_selected_item(tmp_path: Path) -> None:
     }
     assert len(timeline.GetItemListInTrack("video", 1)) == 1
     assert timeline.GetItemListInTrack("video", 1)[0].GetName() == "clip002.mov"
+
+
+def test_timeline_item_properties_get_returns_supported_values(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 124)
+    item._track_type = "video"
+    item._track_index = 1
+    item.SetProperty("Opacity", 75.0)
+    item.SetProperty("ZoomX", 1.15)
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_properties_get",
+        "video",
+        1,
+        0,
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert result.data["properties"]["Opacity"] == 75.0
+    assert result.data["properties"]["ZoomX"] == 1.15
+
+
+def test_timeline_item_properties_set_updates_supported_values(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 124)
+    item._track_type = "video"
+    item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_properties_set",
+        "video",
+        1,
+        0,
+        {"Opacity": 62.5, "ZoomX": 1.2, "ZoomY": 1.2},
+    )
+
+    assert result.success is True
+    assert result.data is not None
+    assert result.data["properties"]["Opacity"] == 62.5
+    assert item.GetProperty("ZoomX") == 1.2
+
+
+def test_timeline_item_properties_set_rejects_unknown_key(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 124)
+    item._track_type = "video"
+    item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_properties_set",
+        "video",
+        1,
+        0,
+        {"Unknown": 1},
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "validation_error"
+
+
+def test_timeline_item_animation_preset_apply_rejects_audio_items(tmp_path: Path) -> None:
+    item = FakeTimelineItem("audio001.wav", 0, 100)
+    item._track_type = "audio"
+    item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[]], audio_tracks=[[item]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_animation_preset_apply",
+        "audio",
+        1,
+        0,
+        "fade_in",
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.category == "unsupported_in_free_mode"
+
+
+def test_timeline_item_animation_preset_apply_is_idempotent_for_dfmcp_comp(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 124)
+    item._track_type = "video"
+    item._track_index = 1
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    first = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_animation_preset_apply",
+        "video",
+        1,
+        0,
+        "fade_in",
+    )
+    second = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_animation_preset_apply",
+        "video",
+        1,
+        0,
+        "fade_out",
+    )
+
+    assert first.success is True
+    assert second.success is True
+    assert item.GetFusionCompNameList() == ["DFMCP Anim"]
+
+
+def test_timeline_item_animation_clear_keeps_non_dfmcp_comps(tmp_path: Path) -> None:
+    item = FakeTimelineItem("clip001.mov", 100, 124)
+    item._track_type = "video"
+    item._track_index = 1
+    item._fusion_comp_names = ["User Comp", "DFMCP Anim"]
+    timeline = FakeTimeline("Assembly", video_tracks=[[item]])
+    project = build_project(timelines=[timeline], current_timeline=timeline)
+
+    result = invoke_with_executor(
+        tmp_path,
+        lambda: FakeResolve(project, ["Demo Project"]),
+        "timeline_item_animation_clear",
+        "video",
+        1,
+        0,
+    )
+
+    assert result.success is True
+    assert item.GetFusionCompNameList() == ["User Comp"]
 
 
 def test_timeline_item_move_recreates_clip_on_same_track(tmp_path: Path) -> None:

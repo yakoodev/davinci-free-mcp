@@ -22,12 +22,14 @@ The repository currently contains a working end-to-end slice with three major su
 - `file_queue` bridge over a shared runtime directory
 - prototype `local_http` bridge for an executor-hosted REST server inside Resolve
 - standalone internal executor for Resolve Free
-- built-in module registry with always-on `core` tools plus opt-in domain/template modules via `DFMCP_ENABLED_MODULES` and `DFMCP_DISABLED_MODULES`
+- built-in module registry with always-on `core` tools, opt-in in-repo modules via `DFMCP_ENABLED_MODULES`/`DFMCP_DISABLED_MODULES`, plus auto-discovered external plugin repos from `./modules_repos`
+- opt-in domain module `cs2_clips` with visual-first CS2 highlight candidate extraction for local NVIDIA captures and `EditPlanProposal` generation for file or directory inputs
 - low-level Resolve project tools: `resolve_health`, `project_current`, `project_list`, `project_manager_folder_list`, `project_manager_folder_open`, `project_manager_folder_up`, `project_manager_folder_path`, `project_open`
 - low-level media-pool tools: `media_pool_list`, `media_pool_folder_open`, `media_pool_folder_create`, `media_pool_folder_up`, `media_pool_folder_root`, `media_pool_folder_path`, `media_pool_folder_list_recursive`, `media_pool_folder_open_path`, `media_import`, `media_clip_inspect`, `media_clip_inspect_path`
-- low-level timeline tools: `timeline_list`, `timeline_current`, `timeline_create_empty`, `timeline_set_current`, `timeline_append_clips`, `timeline_clips_place`, `timeline_create_from_clips`, `timeline_build_from_paths`, `timeline_items_list`, `timeline_inspect`, `timeline_track_items_list`, `timeline_track_inspect`, `timeline_item_inspect`, `timeline_item_delete`, `timeline_item_move`, `timeline_item_split`, `timeline_item_set_source_range`, `timeline_gap_close`, `timeline_remove_gaps`, `timeline_insert_gap`
+- low-level timeline tools: `timeline_list`, `timeline_current`, `timeline_create_empty`, `timeline_set_current`, `timeline_append_clips`, `timeline_clips_place`, `timeline_create_from_clips`, `timeline_build_from_paths`, `timeline_items_list`, `timeline_inspect`, `timeline_track_items_list`, `timeline_track_inspect`, `timeline_item_inspect`, `timeline_item_delete`, `timeline_item_properties_get`, `timeline_item_properties_set`, `timeline_item_animation_preset_apply`, `timeline_item_animation_clear`, `timeline_image_place_animated`, `timeline_item_move`, `timeline_item_split`, `timeline_item_set_source_range`, `timeline_gap_close`, `timeline_remove_gaps`, `timeline_insert_gap`
 - low-level marker tools: `marker_add`, `marker_list`, `marker_inspect`, `marker_list_range`, `marker_delete`
 - local media-analysis tools outside the Resolve bridge: `audio_probe`, `audio_transcribe_segments`, `audio_detect_events`, `video_probe`, `video_detect_shots`, `video_sample_frames`, `video_extract_roi_frames`, `video_build_contact_sheet`, `video_detect_overlay_events`, `video_extract_segment_screenshots`, `video_segment_from_speech`, `video_segment_visual`, `video_segment_audio_visual`, `edit_plan_from_candidates`
+- domain tools can now compile generic media analysis into workflow-specific payloads; `cs2_clips` currently exposes `cs2_list_candidate_events` and `cs2_build_edit_plan`, using HUD ROI analysis first and transcript as fallback
 - console-first executor status inside DaVinci Resolve
 - machine-readable executor heartbeat in `runtime/status/executor_status.json`
 - instance-aware diagnostics with `instance_id` and lock ownership visibility
@@ -62,7 +64,28 @@ src/davinci_free_mcp/
 tests/
 docs/
 references/
+modules_repos/  # optional external plugin repos, each with plugin_module.py
 ```
+
+## External Plugin Repos
+
+External MCP modules can live in `./modules_repos` or a custom path from `DFMCP_MODULES_REPOS_DIR`.
+
+Expected v1 layout for each cloned repo:
+
+```text
+modules_repos/
+  my_plugin_repo/
+    plugin_module.py
+```
+
+`plugin_module.py` must expose:
+
+- `module_id = "..."`
+- `describe_module()`
+- `register_tools(server, backend_service, settings)`
+
+External plugins are auto-loaded at server start. `DFMCP_DISABLED_MODULES` can disable them by `module_id`. If a plugin fails to import or duplicates a builtin `module_id`, the server keeps starting and prints a warning.
 
 ## MVP Scope
 

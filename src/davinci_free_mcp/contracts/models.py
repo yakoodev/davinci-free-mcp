@@ -424,6 +424,64 @@ class ResolveTimelineItemSetSourceRangeData(BaseModel):
     marker: ResolveMarkerSummary | None = None
 
 
+AnimationPresetName = Literal[
+    "fade_in",
+    "fade_out",
+    "fade_in_out",
+    "zoom_in_soft",
+    "zoom_out_soft",
+    "slide_up_fade",
+    "slide_down_fade",
+    "slide_left_fade",
+    "slide_right_fade",
+]
+AnimationEasingName = Literal["linear", "ease_in", "ease_out", "ease_in_out"]
+AnimationDirectionName = Literal["up", "down", "left", "right", "in", "out"]
+
+
+class ResolveTimelineItemPropertiesData(BaseModel):
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    item: ResolveTimelinePlacedItemData
+    properties: dict[str, float | int | bool | str] = Field(default_factory=dict)
+
+
+class ResolveTimelineItemPropertiesSetData(BaseModel):
+    updated: bool
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    item: ResolveTimelinePlacedItemData
+    properties: dict[str, float | int | bool | str] = Field(default_factory=dict)
+
+
+class ResolveTimelineItemAnimationPresetApplyData(BaseModel):
+    applied: bool
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    item: ResolveTimelinePlacedItemData
+    applied_preset: AnimationPresetName
+    fusion_comp_name: str | None = None
+    properties: dict[str, float | int | bool | str] = Field(default_factory=dict)
+
+
+class ResolveTimelineItemAnimationClearData(BaseModel):
+    cleared: bool
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    item: ResolveTimelinePlacedItemData
+    fusion_comp_name: str | None = None
+
+
+class ResolveTimelineImagePlaceAnimatedData(BaseModel):
+    imported_count: int
+    project: ResolveProjectStatus
+    timeline: ResolveTimelineSummary
+    item: ResolveTimelinePlacedItemData
+    applied_preset: AnimationPresetName
+    fusion_comp_name: str | None = None
+    properties: dict[str, float | int | bool | str] = Field(default_factory=dict)
+
+
 class ResolveTimelineGapCloseData(BaseModel):
     closed: bool
     project: ResolveProjectStatus
@@ -468,12 +526,21 @@ class ToolResultEnvelope(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+ModuleKind = Literal["core", "domain", "template"]
 MediaArtifactKind = Literal["json", "image", "audio", "text"]
 MediaScreenshotKind = Literal["midpoint", "boundary", "peak_motion"]
 MediaSegmentSource = Literal["speech", "audio_event", "scene", "fixed_window"]
 TranscriptStatus = Literal["ok", "no_speech_detected", "low_confidence"]
 VideoSegmentMode = Literal["shots", "fixed_window"]
 VideoSegmentationMode = Literal["speech", "visual", "audio_visual"]
+
+
+class ModuleDescriptor(BaseModel):
+    module_id: str
+    display_name: str
+    enabled_by_default: bool = False
+    kind: ModuleKind
+    tools: list[str] = Field(default_factory=list)
 
 
 class MediaAnalysisArtifact(BaseModel):
@@ -548,6 +615,7 @@ class EditPlanProposal(BaseModel):
     source_path: str
     target_timeline_name: str | None = None
     summary: str | None = None
+    candidates: list["EditPlanCandidateEvent"] = Field(default_factory=list)
     segments: list[EditPlanSourceSegment] = Field(default_factory=list)
     operations: list[EditPlanOperation] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
@@ -661,6 +729,30 @@ class SegmentScreenshotSummary(BaseModel):
     screenshots: list[MediaSegmentScreenshot] = Field(default_factory=list)
 
 
+class SampledVideoFrame(BaseModel):
+    frame_index: int
+    timestamp_sec: float
+    path: str
+
+
+class ContactSheetSummary(BaseModel):
+    sheet_index: int
+    path: str
+    columns: int
+    rows: int
+    frame_count: int
+
+
+class OverlayEventCandidate(BaseModel):
+    event_index: int
+    start: float
+    end: float
+    confidence: float
+    label: str
+    artifacts: list[str] = Field(default_factory=list)
+    reason: str | None = None
+
+
 class BaseMediaAnalysisData(BaseModel):
     source: str
     analysis_id: str
@@ -700,3 +792,40 @@ class VideoSegmentationData(BaseMediaAnalysisData):
     segmentation_mode: VideoSegmentationMode
     transcript_status: TranscriptStatus | None = None
     segments: list[MediaSegmentSummary] = Field(default_factory=list)
+
+
+class VideoSampleFramesData(BaseMediaAnalysisData):
+    frames_dir: str
+    fps: float
+    start: float
+    end: float
+    frames: list[SampledVideoFrame] = Field(default_factory=list)
+
+
+class VideoContactSheetData(BaseMediaAnalysisData):
+    frames_dir: str
+    sheets: list[ContactSheetSummary] = Field(default_factory=list)
+
+
+class VideoOverlayEventsData(BaseMediaAnalysisData):
+    frames_dir: str
+    events: list[OverlayEventCandidate] = Field(default_factory=list)
+
+
+class EditPlanCandidateEvent(BaseModel):
+    time_sec: float
+    confidence: float | None = None
+    label: str | None = None
+    reason: str | None = None
+    artifacts: list[str] = Field(default_factory=list)
+
+
+class EditPlanFromCandidatesInput(BaseModel):
+    source_path: str
+    target_timeline_name: str | None = None
+    candidates: list[EditPlanCandidateEvent] = Field(default_factory=list)
+    pre_roll_sec: float = 2.0
+    post_roll_sec: float = 1.5
+    min_segment_sec: float = 2.5
+    max_segment_sec: float = 6.0
+    merge_gap_sec: float = 1.0

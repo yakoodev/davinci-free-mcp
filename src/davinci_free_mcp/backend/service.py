@@ -10,6 +10,9 @@ from davinci_free_mcp.backend.media_analysis import LocalMediaAnalyzer
 from davinci_free_mcp.bridge.base import Bridge
 from davinci_free_mcp.config import AppSettings
 from davinci_free_mcp.contracts import (
+    AnimationDirectionName,
+    AnimationEasingName,
+    AnimationPresetName,
     AudioEventsData,
     AudioProbeData,
     AudioTranscriptionData,
@@ -37,10 +40,15 @@ from davinci_free_mcp.contracts import (
     ResolveTimelineBuildFromPathsData,
     ResolveTimelineClipsPlaceData,
     ResolveTimelineGapCloseData,
+    ResolveTimelineImagePlaceAnimatedData,
     ResolveTimelineInsertGapData,
+    ResolveTimelineItemAnimationClearData,
+    ResolveTimelineItemAnimationPresetApplyData,
     ResolveTimelineItemDeleteData,
     ResolveTimelineItemInspectData,
     ResolveTimelineItemMoveData,
+    ResolveTimelineItemPropertiesData,
+    ResolveTimelineItemPropertiesSetData,
     ResolveTimelineItemSetSourceRangeData,
     ResolveTimelineItemSplitData,
     ResolveTimelineCreateEmptyData,
@@ -55,8 +63,14 @@ from davinci_free_mcp.contracts import (
     ResolveTimelineListData,
     ResolveTimelineSetCurrentData,
     ToolResultEnvelope,
+    EditPlanCandidateEvent,
+    EditPlanFromCandidatesInput,
+    EditPlanProposal,
     VideoProbeData,
+    VideoContactSheetData,
+    VideoOverlayEventsData,
     VideoSegmentationData,
+    VideoSampleFramesData,
     VideoSegmentScreenshotsData,
     VideoShotsData,
 )
@@ -414,6 +428,103 @@ class ResolveBackendService:
             timeout_ms=timeout_ms,
         )
 
+    def timeline_item_properties_get(
+        self,
+        track_type: str,
+        track_index: int,
+        item_index: int,
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_item_properties_get",
+            ResolveTimelineItemPropertiesData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={
+                "track_type": track_type,
+                "track_index": track_index,
+                "item_index": item_index,
+            },
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_item_properties_set(
+        self,
+        track_type: str,
+        track_index: int,
+        item_index: int,
+        properties: dict[str, object],
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_item_properties_set",
+            ResolveTimelineItemPropertiesSetData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={
+                "track_type": track_type,
+                "track_index": track_index,
+                "item_index": item_index,
+                "properties": properties,
+            },
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_item_animation_preset_apply(
+        self,
+        track_type: str,
+        track_index: int,
+        item_index: int,
+        preset: AnimationPresetName,
+        timeline_name: str | None = None,
+        duration_frames: int | None = None,
+        intensity: float | None = None,
+        direction: AnimationDirectionName | None = None,
+        easing: AnimationEasingName | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        payload: dict[str, object] = {
+            "track_type": track_type,
+            "track_index": track_index,
+            "item_index": item_index,
+            "preset": preset,
+        }
+        if duration_frames is not None:
+            payload["duration_frames"] = duration_frames
+        if intensity is not None:
+            payload["intensity"] = intensity
+        if direction is not None:
+            payload["direction"] = direction
+        if easing is not None:
+            payload["easing"] = easing
+        return self._invoke_command(
+            "timeline_item_animation_preset_apply",
+            ResolveTimelineItemAnimationPresetApplyData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload=payload,
+            timeout_ms=timeout_ms,
+        )
+
+    def timeline_item_animation_clear(
+        self,
+        track_type: str,
+        track_index: int,
+        item_index: int,
+        timeline_name: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_command(
+            "timeline_item_animation_clear",
+            ResolveTimelineItemAnimationClearData,
+            target={"timeline": timeline_name} if timeline_name else {},
+            payload={
+                "track_type": track_type,
+                "track_index": track_index,
+                "item_index": item_index,
+            },
+            timeout_ms=timeout_ms,
+        )
+
     def timeline_item_move(
         self,
         track_type: str,
@@ -517,6 +628,151 @@ class ResolveBackendService:
             target={"timeline": timeline_name} if timeline_name else {},
             payload=payload,
             timeout_ms=timeout_ms,
+        )
+
+    def timeline_image_place_animated(
+        self,
+        path: str,
+        record_frame: int,
+        track_index: int,
+        duration_frames: int,
+        preset: AnimationPresetName,
+        timeline_name: str | None = None,
+        opacity: float | None = None,
+        scale: float | None = None,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        import_result = self.media_import([path], timeout_ms=timeout_ms)
+        if not import_result.success:
+            return import_result
+
+        clip_items = ((import_result.data or {}).get("items") or [])
+        if not clip_items:
+            return ToolResultEnvelope(
+                success=False,
+                error=BridgeError(
+                    category="execution_failure",
+                    message="Media import succeeded but returned no imported items.",
+                    details={"path": path},
+                ),
+                warnings=import_result.warnings,
+                meta=import_result.meta,
+            )
+
+        clip_name = str(clip_items[0].get("name") or "").strip()
+        if not clip_name:
+            return ToolResultEnvelope(
+                success=False,
+                error=BridgeError(
+                    category="execution_failure",
+                    message="Media import returned an item without a clip name.",
+                    details={"path": path},
+                ),
+                warnings=import_result.warnings,
+                meta=import_result.meta,
+            )
+
+        place_result = self.timeline_clips_place(
+            [
+                {
+                    "clip_name": clip_name,
+                    "record_frame": record_frame,
+                    "track_index": track_index,
+                    "media_type": 1,
+                    "start_frame": 0,
+                    "end_frame": duration_frames,
+                }
+            ],
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        )
+        if not place_result.success:
+            return place_result
+
+        placed_items = ((place_result.data or {}).get("items") or [])
+        if not placed_items:
+            return ToolResultEnvelope(
+                success=False,
+                error=BridgeError(
+                    category="execution_failure",
+                    message="Timeline placement succeeded but returned no placed items.",
+                    details={"path": path, "clip_name": clip_name},
+                ),
+                warnings=place_result.warnings,
+                meta=place_result.meta,
+            )
+
+        placed_item = dict(placed_items[0])
+        resolved_item_index = self._resolve_item_index_from_summary(
+            placed_item,
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        )
+        if resolved_item_index is None:
+            return ToolResultEnvelope(
+                success=False,
+                error=BridgeError(
+                    category="execution_failure",
+                    message="Placed item could not be resolved back to a stable timeline item index.",
+                    details={"item": placed_item},
+                ),
+                warnings=place_result.warnings,
+                meta=place_result.meta,
+            )
+        placed_item["item_index"] = resolved_item_index
+
+        properties: dict[str, object] = {}
+        if opacity is not None:
+            properties["Opacity"] = opacity
+        if scale is not None:
+            properties["ZoomX"] = scale
+            properties["ZoomY"] = scale
+        accumulated_warnings = list(import_result.warnings) + list(place_result.warnings)
+        last_meta = place_result.meta
+        if properties:
+            properties_result = self.timeline_item_properties_set(
+                "video",
+                track_index,
+                resolved_item_index,
+                properties,
+                timeline_name=timeline_name,
+                timeout_ms=timeout_ms,
+            )
+            if not properties_result.success:
+                return properties_result
+            accumulated_warnings.extend(properties_result.warnings)
+            last_meta = properties_result.meta
+
+        animation_result = self.timeline_item_animation_preset_apply(
+            "video",
+            track_index,
+            resolved_item_index,
+            preset,
+            timeline_name=timeline_name,
+            duration_frames=duration_frames,
+            timeout_ms=timeout_ms,
+        )
+        if not animation_result.success:
+            return animation_result
+
+        animation_data = animation_result.data or {}
+        accumulated_warnings.extend(animation_result.warnings)
+        payload = ResolveTimelineImagePlaceAnimatedData.model_validate(
+            {
+                "imported_count": int(import_result.data["imported_count"]),
+                "project": animation_data["project"],
+                "timeline": animation_data["timeline"],
+                "item": animation_data["item"],
+                "applied_preset": animation_data["applied_preset"],
+                "fusion_comp_name": animation_data.get("fusion_comp_name"),
+                "properties": animation_data.get("properties") or properties,
+            }
+        )
+        return ToolResultEnvelope(
+            success=True,
+            data=payload.model_dump(mode="json"),
+            warnings=accumulated_warnings,
+            meta=last_meta,
         )
 
     def timeline_remove_gaps(
@@ -747,6 +1003,82 @@ class ResolveBackendService:
             screenshots_per_segment=screenshots_per_segment,
         )
 
+    def video_sample_frames(
+        self,
+        path: str,
+        start: float = 0.0,
+        end: float | None = None,
+        fps: float = 1.0,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_local_analysis(
+            "video_sample_frames",
+            VideoSampleFramesData,
+            path=path,
+            start=start,
+            end=end,
+            fps=fps,
+        )
+
+    def video_extract_roi_frames(
+        self,
+        path: str,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        start: float = 0.0,
+        end: float | None = None,
+        fps: float = 1.0,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_local_analysis(
+            "video_extract_roi_frames",
+            VideoSampleFramesData,
+            path=path,
+            x=x,
+            y=y,
+            width=width,
+            height=height,
+            start=start,
+            end=end,
+            fps=fps,
+        )
+
+    def video_build_contact_sheet(
+        self,
+        path: str,
+        frames_dir: str,
+        columns: int = 4,
+        rows: int = 4,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_local_analysis(
+            "video_build_contact_sheet",
+            VideoContactSheetData,
+            path=path,
+            frames_dir=frames_dir,
+            columns=columns,
+            rows=rows,
+        )
+
+    def video_detect_overlay_events(
+        self,
+        path: str,
+        frames_dir: str,
+        min_change_ratio: float = 0.05,
+        min_event_gap_sec: float = 0.5,
+        timeout_ms: int | None = None,
+    ) -> ToolResultEnvelope:
+        return self._invoke_local_analysis(
+            "video_detect_overlay_events",
+            VideoOverlayEventsData,
+            path=path,
+            frames_dir=frames_dir,
+            min_change_ratio=min_change_ratio,
+            min_event_gap_sec=min_event_gap_sec,
+        )
+
     def video_segment_from_speech(
         self,
         path: str,
@@ -794,6 +1126,54 @@ class ResolveBackendService:
             path=path,
             min_silence_sec=min_silence_sec,
             screenshots_per_segment=screenshots_per_segment,
+        )
+
+    def edit_plan_from_candidates(
+        self,
+        source_path: str,
+        candidates: list[dict[str, object]],
+        target_timeline_name: str | None = None,
+        pre_roll_sec: float = 2.0,
+        post_roll_sec: float = 1.5,
+        min_segment_sec: float = 2.5,
+        max_segment_sec: float = 6.0,
+        merge_gap_sec: float = 1.0,
+    ) -> ToolResultEnvelope:
+        try:
+            request = EditPlanFromCandidatesInput.model_validate(
+                {
+                    "source_path": source_path,
+                    "target_timeline_name": target_timeline_name,
+                    "candidates": candidates,
+                    "pre_roll_sec": pre_roll_sec,
+                    "post_roll_sec": post_roll_sec,
+                    "min_segment_sec": min_segment_sec,
+                    "max_segment_sec": max_segment_sec,
+                    "merge_gap_sec": merge_gap_sec,
+                }
+            )
+            proposal = self._build_edit_plan_from_candidates(request)
+        except ValueError as exc:
+            return ToolResultEnvelope(
+                success=False,
+                error=BridgeError(
+                    category="validation_error",
+                    message=str(exc),
+                ),
+            )
+        except Exception as exc:
+            return ToolResultEnvelope(
+                success=False,
+                error=BridgeError(
+                    category="execution_failure",
+                    message="Edit-plan proposal failed.",
+                    details={"exception": str(exc)},
+                ),
+            )
+        return ToolResultEnvelope(
+            success=True,
+            data=proposal.model_dump(mode="json", exclude_none=True, exclude_defaults=True),
+            meta={"local_analysis": True, "tool_name": "edit_plan_from_candidates"},
         )
 
     def _invoke_local_analysis(
@@ -845,6 +1225,95 @@ class ResolveBackendService:
             ),
             warnings=result.get("warnings", []),
             meta={"local_analysis": True, "tool_name": method_name},
+        )
+
+    def _build_edit_plan_from_candidates(
+        self,
+        request: EditPlanFromCandidatesInput,
+    ) -> EditPlanProposal:
+        if request.pre_roll_sec < 0 or request.post_roll_sec < 0:
+            raise ValueError("pre_roll_sec and post_roll_sec must be non-negative.")
+        if request.min_segment_sec <= 0 or request.max_segment_sec <= 0:
+            raise ValueError("min_segment_sec and max_segment_sec must be greater than 0.")
+        if request.max_segment_sec < request.min_segment_sec:
+            raise ValueError("max_segment_sec must be greater than or equal to min_segment_sec.")
+        sorted_candidates = sorted(request.candidates, key=lambda item: item.time_sec)
+        if not sorted_candidates:
+            return EditPlanProposal(
+                source_path=request.source_path,
+                target_timeline_name=request.target_timeline_name,
+                summary="No candidate events were provided.",
+                candidates=[],
+                segments=[],
+                operations=[],
+                warnings=["No candidate events were available to build a proposal."],
+            )
+
+        segment_windows: list[tuple[float, float, list[EditPlanCandidateEvent]]] = []
+        for candidate in sorted_candidates:
+            start = max(0.0, candidate.time_sec - request.pre_roll_sec)
+            end = max(start, candidate.time_sec + request.post_roll_sec)
+            if end - start < request.min_segment_sec:
+                end = start + request.min_segment_sec
+            if end - start > request.max_segment_sec:
+                end = start + request.max_segment_sec
+            if segment_windows and start - segment_windows[-1][1] < request.merge_gap_sec:
+                previous_start, previous_end, previous_candidates = segment_windows[-1]
+                merged_end = max(previous_end, end)
+                if merged_end - previous_start > request.max_segment_sec:
+                    merged_end = previous_start + request.max_segment_sec
+                previous_candidates.append(candidate)
+                segment_windows[-1] = (previous_start, merged_end, previous_candidates)
+                continue
+            segment_windows.append((start, end, [candidate]))
+
+        segments = []
+        operations = []
+        for index, (start, end, window_candidates) in enumerate(segment_windows):
+            best_candidate = max(
+                window_candidates,
+                key=lambda item: item.confidence if item.confidence is not None else 0.0,
+            )
+            label = best_candidate.label or f"Candidate {index + 1}"
+            score = best_candidate.confidence
+            segment = {
+                "start": start,
+                "end": end,
+                "label": label,
+                "score": score,
+                "transcript_text": best_candidate.reason,
+            }
+            segments.append(segment)
+            operations.append(
+                {
+                    "tool_name": "timeline_clips_place",
+                    "description": f"Place source clip for proposed segment {index + 1}.",
+                    "timeline_name": request.target_timeline_name,
+                    "arguments": {
+                        "placements": [
+                            {
+                                "record_frame": 0,
+                                "track_index": 1,
+                                "media_type": 1,
+                            }
+                        ]
+                    },
+                    "source_segment": segment,
+                }
+            )
+
+        return EditPlanProposal.model_validate(
+            {
+                "source_path": request.source_path,
+                "target_timeline_name": request.target_timeline_name,
+                "summary": f"{len(segments)} proposed segment(s) from {len(sorted_candidates)} candidate event(s).",
+                "candidates": [candidate.model_dump(mode="json") for candidate in sorted_candidates],
+                "segments": segments,
+                "operations": operations,
+                "warnings": [
+                    "This proposal does not mutate Resolve directly; review segments before applying timeline operations."
+                ],
+            }
         )
 
     def _invoke_command(
@@ -917,3 +1386,44 @@ class ResolveBackendService:
             warnings=result.warnings,
             meta={"bridge_status": bridge_status, **result.meta},
         )
+
+    def _resolve_item_index_from_summary(
+        self,
+        item_summary: dict[str, object],
+        *,
+        timeline_name: str | None,
+        timeout_ms: int | None,
+    ) -> int | None:
+        item_index = item_summary.get("item_index")
+        if isinstance(item_index, int):
+            return item_index
+
+        track_type = item_summary.get("track_type")
+        track_index = item_summary.get("track_index")
+        if not isinstance(track_type, str) or not isinstance(track_index, int):
+            return None
+
+        track_items_result = self.timeline_track_items_list(
+            track_type,
+            track_index,
+            timeline_name=timeline_name,
+            timeout_ms=timeout_ms,
+        )
+        if not track_items_result.success:
+            return None
+
+        expected_name = item_summary.get("name")
+        expected_start = item_summary.get("start_frame")
+        expected_end = item_summary.get("end_frame")
+        track_payload = (track_items_result.data or {}).get("track") or {}
+        for candidate in track_payload.get("items") or []:
+            if candidate.get("name") != expected_name:
+                continue
+            if candidate.get("start_frame") != expected_start:
+                continue
+            if candidate.get("end_frame") != expected_end:
+                continue
+            resolved = candidate.get("item_index")
+            if isinstance(resolved, int):
+                return resolved
+        return None

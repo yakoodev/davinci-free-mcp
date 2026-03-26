@@ -579,6 +579,23 @@ Move one timeline item by recreating the same source range at a new position and
 Free-mode notes:
 V1 does not promise preservation of transitions, Fusion/effects, or complex linked state.
 
+### Animation tools
+
+The current codebase also exposes a small v1 animation surface for video items:
+
+- `timeline_item_properties_get`
+- `timeline_item_properties_set`
+- `timeline_item_animation_preset_apply`
+- `timeline_item_animation_clear`
+- `timeline_image_place_animated`
+
+Animation notes:
+
+- `timeline_item_properties_set` is a static clip-property tool, not a generic keyframe API.
+- Smooth presets are Fusion-backed and currently target one video item at a time.
+- `timeline_item_animation_clear` only removes DFMCP-managed Fusion comps and leaves user comps intact.
+- `timeline_image_place_animated` is a composed workflow over import, placement, and preset apply.
+
 ### Additional timeline tools already implemented
 
 The current codebase also exposes:
@@ -588,6 +605,11 @@ The current codebase also exposes:
 - `timeline_track_inspect`
 - `timeline_item_inspect`
 - `timeline_item_delete`
+- `timeline_item_properties_get`
+- `timeline_item_properties_set`
+- `timeline_item_animation_preset_apply`
+- `timeline_item_animation_clear`
+- `timeline_image_place_animated`
 - `timeline_item_split`
 - `timeline_item_set_source_range`
 - `timeline_gap_close`
@@ -709,6 +731,11 @@ Currently implemented:
 - `timeline_track_inspect`
 - `timeline_item_inspect`
 - `timeline_item_delete`
+- `timeline_item_properties_get`
+- `timeline_item_properties_set`
+- `timeline_item_animation_preset_apply`
+- `timeline_item_animation_clear`
+- `timeline_image_place_animated`
 - `timeline_item_move`
 - `timeline_item_split`
 - `timeline_item_set_source_range`
@@ -737,6 +764,18 @@ Currently implemented:
 - `video_segment_visual`
 - `video_segment_audio_visual`
 - `edit_plan_from_candidates`
+
+### Domain module tools already available
+
+- `cs2_list_candidate_events`
+- `cs2_build_edit_plan`
+
+`cs2_clips` notes:
+
+- visual-first for CS2/NVIDIA captures
+- top-right kill-feed ROI is the primary signal
+- lower-left cash ROI is used as a secondary local-player hint
+- transcript remains a fallback when visual confidence is weak
 
 ### Composite tools for later
 
