@@ -4,9 +4,6 @@
 
 ## Unreleased
 
-- Добавлен v1 animation surface для timeline items: `timeline_item_properties_get`, `timeline_item_properties_set`, `timeline_item_animation_preset_apply`, `timeline_item_animation_clear` и composed tool `timeline_image_place_animated`.
-- Новый animation layer использует Fusion-backed preset apply/clear для smooth fade/zoom/slide сценариев и отдельный whitelist-based static property API для `Opacity`, `ZoomX/Y`, `Pan`, `Tilt`, `RotationAngle`, `CompositeMode` и `Crop*`.
-- Добавлены Fusion template assets, backend orchestration для import/place/animate workflow, contracts для animation payloads и тесты на property validation, audio rejection, idempotent preset apply и non-destructive animation clear.
 - `docker-compose.yml` теперь явно включает `core,cs2_clips` через `DFMCP_ENABLED_MODULES`, чтобы live MCP одновременно публиковал low-level Resolve tools и доменные `cs2_list_candidate_events` / `cs2_build_edit_plan`.
 - `cs2_clips` переведен на visual-first pipeline для CS2/NVIDIA клипов: модуль теперь сначала ищет kill-feed/cash HUD события через ROI-анализ кадров, затем добавляет audio/transcript boosts и только после этого строит candidate events и rough-cut proposals.
 - HUD-specific kill detector в `cs2_clips` дополнительно откалиброван под локальные NVIDIA CS2 записи: детекция теперь опирается на dark-banner/local-name peak heuristics без агрессивного `top-N`, а opt-in local regression-check покрывает три размеченных клипа с эталонными таймкодами `53/64`, `9/13/22/55` и `40/59/71/85/90`.
@@ -22,6 +19,12 @@
 - Добавлены contracts и тесты для module descriptors, sampled-frame/contact-sheet/overlay-event outputs и deterministic proposal-building из candidate events.
 - Добавлен helper `scripts/cs2_auto_kill_segments.py` для авто-поиска highlight-сегментов CS2 по `*.transcript.json` sidecar с машинно-читаемым JSON output для последующей сборки таймлайна.
 - Добавлен первый rough-cut edit toolkit: `timeline_item_split`, `timeline_item_set_source_range`, `timeline_gap_close`, `timeline_remove_gaps`, `timeline_insert_gap`.
+
+### 33e56fa - Add timeline animation MCP tools
+
+- Добавлен v1 animation surface для timeline items: `timeline_item_properties_get`, `timeline_item_properties_set`, `timeline_item_animation_preset_apply`, `timeline_item_animation_clear` и composed tool `timeline_image_place_animated`.
+- Новый animation layer использует Fusion-backed preset apply/clear для smooth fade/zoom/slide сценариев и отдельный whitelist-based static property API для `Opacity`, `ZoomX/Y`, `Pan`, `Tilt`, `RotationAngle`, `CompositeMode` и `Crop*`.
+- Добавлены Fusion template assets, backend orchestration для import/place/animate workflow, contracts для animation payloads и тесты на property validation, audio rejection, idempotent preset apply и non-destructive animation clear.
 - Новые structural timeline mutations теперь могут автоматически ставить технические маркеры на edit points с возможностью отключения через `add_marker=false`.
 - `timeline_clips_place` получил path-oriented clip selector через `media_pool_path` без ломки существующего `clip_name` workflow.
 - Исправлен fallback в `timeline_clips_place`: пустой `media_pool_path` больше не ломает валидный `clip_name` selector.
